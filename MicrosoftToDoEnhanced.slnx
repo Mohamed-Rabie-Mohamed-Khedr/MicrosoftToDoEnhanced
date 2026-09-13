@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Core/Core.csproj" Id="5cf26539-91c2-43d3-8963-e211c4621a85" />
+  <Project Path="MicrosoftToDoEnhanced/MicrosoftToDoEnhanced.csproj" Id="4c75721b-c045-4bb4-ad6f-e2e0307806ed" />
+</Solution>

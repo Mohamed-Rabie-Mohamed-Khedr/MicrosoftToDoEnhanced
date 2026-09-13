@@ -1,0 +1,116 @@
+﻿CREATE DATABASE MicrosoftToDoEnhanced;
+GO
+USE MicrosoftToDoEnhanced;
+GO
+
+CREATE TABLE Permissions (
+    PermissionID   INT IDENTITY(1,1) PRIMARY KEY,
+    PermissionName VARCHAR(20) NOT NULL UNIQUE
+);
+
+INSERT INTO Permissions (PermissionName) VALUES ('Person'), ('Admin');
+
+CREATE TABLE Users (
+    UserID       INT IDENTITY(1,1) PRIMARY KEY,
+    UserName     VARCHAR(100) NOT NULL UNIQUE,
+    ShowName     VARCHAR(100) NOT NULL,
+    UserEmail    VARCHAR(255) NULL,
+    PasswordHash VARCHAR(255) NOT NULL,
+    PermissionID INT NOT NULL,
+    Color        VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    FOREIGN KEY (PermissionID) REFERENCES Permissions(PermissionID)
+);
+
+CREATE TABLE Groups (
+    GroupID          INT IDENTITY(1,1) PRIMARY KEY,
+    AdminID          INT NOT NULL,
+    GroupName        VARCHAR(100) NOT NULL,
+    GroupDescription VARCHAR(MAX) NULL,
+    Color            VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    FOREIGN KEY (AdminID) REFERENCES Users(UserID)
+);
+
+CREATE TABLE GroupMembers (
+    GroupMemberID INT IDENTITY(1,1) PRIMARY KEY,
+    GroupID       INT NOT NULL,
+    UserID        INT NOT NULL,
+    FOREIGN KEY (GroupID) REFERENCES Groups(GroupID),
+    FOREIGN KEY (UserID) REFERENCES Users(UserID),
+    CONSTRAINT UQ_GroupMember UNIQUE (GroupID, UserID)
+);
+
+CREATE TABLE PostsInGroups (
+    PostID      INT IDENTITY(1,1) PRIMARY KEY,
+    GroupID     INT NOT NULL,
+    UserID      INT NOT NULL,
+    PostContent VARCHAR(MAX) NOT NULL,
+    PostDate    DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+    FOREIGN KEY (GroupID) REFERENCES Groups(GroupID),
+    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+);
+
+CREATE TABLE TaskStatus (
+    TaskStatusID      INT IDENTITY(1,1) PRIMARY KEY,
+    StatusName        VARCHAR(20) NOT NULL UNIQUE,
+    StatusDescription VARCHAR(255) NULL
+);
+
+INSERT INTO TaskStatus (StatusName, StatusDescription) VALUES
+('Pending', 'Task is pending for admin approval'),
+('Incomplete', 'Task is incomplete'),
+('Completed', 'Task is completed');
+
+CREATE TABLE LevelOfImportance (
+    LevelOfImportanceID INT IDENTITY(1,1) PRIMARY KEY,
+    LevelName VARCHAR(20) NOT NULL UNIQUE
+);
+
+INSERT INTO LevelOfImportance (LevelName) VALUES ('Low'), ('Medium'), ('High');
+
+CREATE TABLE Tasks (
+    TaskID            INT IDENTITY(1,1) PRIMARY KEY,
+    TaskParentID      INT NULL,
+    TaskStatusID      INT NOT NULL DEFAULT 2,
+    UserID            INT NOT NULL,
+    GroupID           INT NULL,
+    TaskName          VARCHAR(100) NOT NULL,
+    ImportanceLevelID INT NOT NULL DEFAULT 2,
+    Description       VARCHAR(MAX) NULL,
+    CreationDate      DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+    Color             VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    FOREIGN KEY (TaskParentID) REFERENCES Tasks(TaskID),
+    FOREIGN KEY (TaskStatusID) REFERENCES TaskStatus(TaskStatusID),
+    FOREIGN KEY (ImportanceLevelID) REFERENCES LevelOfImportance(LevelOfImportanceID),
+    FOREIGN KEY (UserID) REFERENCES Users(UserID),
+    FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
+);
+
+CREATE TABLE Attachments (
+    AttachmentID INT IDENTITY(1,1) PRIMARY KEY,
+    TaskID       INT NOT NULL FOREIGN KEY REFERENCES Tasks(TaskID),
+    FileName     NVARCHAR(MAX),
+    FileData     VARBINARY(MAX),
+    FileSizeKB   INT
+);
+
+CREATE TABLE Assigned (
+    AssignedID INT IDENTITY(1,1) PRIMARY KEY,
+    TaskID     INT FOREIGN KEY REFERENCES Tasks(TaskID),
+    ToUserID   INT FOREIGN KEY REFERENCES Users(UserID)
+);
+
+CREATE TABLE RepetitionTypes (
+    RepetitionTypeID INT IDENTITY(1,1) PRIMARY KEY,
+    RepetitionName   VARCHAR(20) NOT NULL UNIQUE
+);
+
+INSERT INTO RepetitionTypes (RepetitionName) VALUES
+('None'), ('Daily'), ('Weekly'), ('Monthly'), ('Yearly');
+
+CREATE TABLE Planned (
+    PlannedID        INT IDENTITY(1,1) PRIMARY KEY,
+    TaskID           INT FOREIGN KEY REFERENCES Tasks(TaskID),
+    PlannedStartDate DATETIME2 NOT NULL,
+    PlannedEndDate   DATETIME2 NULL,
+    RepetitionTypeID INT FOREIGN KEY REFERENCES RepetitionTypes(RepetitionTypeID)
+);
