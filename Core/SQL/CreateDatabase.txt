@@ -13,22 +13,194 @@ INSERT INTO Permissions (PermissionName) VALUES ('Person'), ('Admin');
 CREATE TABLE Users (
     UserID       INT IDENTITY(1,1) PRIMARY KEY,
     UserName     VARCHAR(100) NOT NULL UNIQUE,
-    ShowName     VARCHAR(100) NOT NULL,
+    ShowName     NVARCHAR(100) NOT NULL,
     UserEmail    VARCHAR(255) NULL,
     PasswordHash VARCHAR(255) NOT NULL,
     PermissionID INT NOT NULL,
-    Color        VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    Color        VARCHAR(16) NOT NULL DEFAULT '#FFFFFF',
     FOREIGN KEY (PermissionID) REFERENCES Permissions(PermissionID)
 );
+GO
+
+CREATE PROCEDURE AddUser
+    @UserName VARCHAR(100),
+    @ShowName NVARCHAR(100),
+    @UserEmail VARCHAR(255),
+    @PasswordHash VARCHAR(255),
+    @PermissionID INT,
+    @Color VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    INSERT INTO Users (UserName, ShowName, UserEmail, PasswordHash, PermissionID, Color)
+    VALUES (@UserName, @ShowName, @UserEmail, @PasswordHash, @PermissionID, @Color);
+END
+GO
+
+CREATE PROCEDURE UpdateUser
+    @UserID INT,
+    @UserName VARCHAR(100),
+    @ShowName NVARCHAR(100),
+    @UserEmail VARCHAR(255),
+    @PasswordHash VARCHAR(255),
+    @PermissionID INT,
+    @Color VARCHAR(16)
+AS
+BEGIN
+    UPDATE Users
+    SET UserName = @UserName,
+        ShowName = @ShowName,
+        UserEmail = @UserEmail,
+        PasswordHash = @PasswordHash,
+        PermissionID = @PermissionID,
+        Color = @Color
+    WHERE UserID = @UserID;
+END
+GO
+
+CREATE PROCEDURE DeleteUser
+    @UserID INT
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION
+        DECLARE @AdminGroups TABLE (GroupID INT PRIMARY KEY);
+        INSERT INTO @AdminGroups (GroupID)
+        SELECT GroupID FROM Groups WHERE AdminID = @UserID;
+
+        DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
+        INSERT INTO @TasksToDelete (TaskID)
+        SELECT TaskID FROM Tasks
+        WHERE UserID = @UserID OR GroupID IN (SELECT GroupID FROM @AdminGroups);
+
+        DECLARE @RowsAdded INT = 1;
+        WHILE @RowsAdded > 0
+        BEGIN
+            INSERT INTO @TasksToDelete (TaskID)
+            SELECT T.TaskID FROM Tasks T
+            JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
+            WHERE T.TaskID NOT IN (SELECT TaskID FROM @TasksToDelete);
+
+            SET @RowsAdded = @@ROWCOUNT;
+        END
+
+        DELETE FROM Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Planned     WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Tasks       WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+
+        DELETE FROM PostsInGroups WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
+        DELETE FROM GroupMembers  WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
+        DELETE FROM Groups        WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
+
+        DELETE FROM PostsInGroups WHERE UserID = @UserID;
+        DELETE FROM GroupMembers  WHERE UserID = @UserID;
+        DELETE FROM Assigned      WHERE ToUserID = @UserID;
+
+        DELETE FROM Users WHERE UserID = @UserID;
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+    END CATCH
+END
+GO
+
+CREATE PROCEDURE GetUser
+    @UserID INT
+AS
+BEGIN
+    SELECT * FROM Users WHERE UserID = @UserID;
+END
+GO
+
+CREATE FUNCTION UserExists (@UserName VARCHAR(100))
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @Exists BIT = 0;
+    IF EXISTS (SELECT 1 FROM Users WHERE UserName = @UserName)
+        SET @Exists = 1;
+    RETURN @Exists;
+END
+GO
 
 CREATE TABLE Groups (
     GroupID          INT IDENTITY(1,1) PRIMARY KEY,
     AdminID          INT NOT NULL,
-    GroupName        VARCHAR(100) NOT NULL,
-    GroupDescription VARCHAR(MAX) NULL,
-    Color            VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    GroupName        NVARCHAR(100) NOT NULL,
+    GroupDescription NVARCHAR(MAX) NULL,
+    Color            VARCHAR(16) NOT NULL DEFAULT '#FFFFFF',
     FOREIGN KEY (AdminID) REFERENCES Users(UserID)
 );
+GO
+
+CREATE PROCEDURE AddGroup
+    @AdminID INT,
+    @GroupName NVARCHAR(100),
+    @GroupDescription NVARCHAR(MAX) = NULL,
+    @Color VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    INSERT INTO Groups (AdminID, GroupName, GroupDescription, Color)
+    VALUES (@AdminID, @GroupName, @GroupDescription, @Color);
+END
+GO
+
+CREATE PROCEDURE UpdateGroup
+    @GroupID INT,
+    @AdminID INT,
+    @GroupName NVARCHAR(100),
+    @GroupDescription NVARCHAR(MAX) = NULL,
+    @Color VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    UPDATE Groups
+    SET AdminID = @AdminID,
+        GroupName = @GroupName,
+        GroupDescription = @GroupDescription,
+        Color = @Color
+    WHERE GroupID = @GroupID;
+END
+GO
+
+CREATE PROCEDURE DeleteGroup
+    @GroupID INT
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION
+
+        DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
+        INSERT INTO @TasksToDelete (TaskID)
+        SELECT TaskID FROM Tasks WHERE GroupID = @GroupID AND TaskParentID IS NULL;
+
+        DECLARE @RowsAdded INT = 1;
+        WHILE @RowsAdded > 0
+        BEGIN
+            INSERT INTO @TasksToDelete (TaskID)
+            SELECT T.TaskID FROM Tasks T
+            JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
+            WHERE T.TaskID NOT IN (SELECT TaskID FROM @TasksToDelete);
+
+            SET @RowsAdded = @@ROWCOUNT;
+        END
+
+        DELETE FROM Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Planned     WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Tasks       WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+
+        DELETE FROM GroupMembers WHERE GroupID = @GroupID;
+        DELETE FROM PostsInGroups WHERE GroupID = @GroupID;
+        DELETE FROM Groups WHERE GroupID = @GroupID;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+    END CATCH
+END
+GO
 
 CREATE TABLE GroupMembers (
     GroupMemberID INT IDENTITY(1,1) PRIMARY KEY,
@@ -38,16 +210,70 @@ CREATE TABLE GroupMembers (
     FOREIGN KEY (UserID) REFERENCES Users(UserID),
     CONSTRAINT UQ_GroupMember UNIQUE (GroupID, UserID)
 );
+GO
+
+CREATE PROCEDURE AddGroupMember
+    @GroupID INT,
+    @UserID INT
+AS
+BEGIN
+    INSERT INTO GroupMembers (GroupID, UserID)
+    VALUES (@GroupID, @UserID);
+END
+GO
+
+CREATE PROCEDURE DeleteGroupMember
+    @GroupID INT,
+    @UserID INT
+AS
+BEGIN
+    DELETE FROM GroupMembers WHERE GroupID = @GroupID AND UserID = @UserID;
+END
+GO
 
 CREATE TABLE PostsInGroups (
     PostID      INT IDENTITY(1,1) PRIMARY KEY,
     GroupID     INT NOT NULL,
     UserID      INT NOT NULL,
-    PostContent VARCHAR(MAX) NOT NULL,
+    PostContent NVARCHAR(MAX) NOT NULL,
     PostDate    DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
     FOREIGN KEY (GroupID) REFERENCES Groups(GroupID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID)
 );
+GO
+
+CREATE PROCEDURE AddPostInGroup
+    @GroupID INT,
+    @UserID INT,
+    @PostContent NVARCHAR(MAX)
+AS
+BEGIN
+    INSERT INTO PostsInGroups (GroupID, UserID, PostContent)
+    VALUES (@GroupID, @UserID, @PostContent);
+END
+GO
+
+CREATE PROCEDURE DeletePostInGroup
+    @PostID INT
+AS
+BEGIN
+    DELETE FROM PostsInGroups WHERE PostID = @PostID;
+END
+GO
+
+CREATE PROCEDURE GetPostsInGroup
+    @GroupID INT,
+    @StartCount INT
+AS
+BEGIN
+    DECLARE @PostCount INT = 10;
+    DECLARE @EndCount INT = @StartCount - @PostCount;
+
+    SELECT * FROM PostsInGroups
+    WHERE GroupID = @GroupID AND PostID BETWEEN @EndCount AND @StartCount
+    ORDER BY PostID DESC;
+END
+GO
 
 CREATE TABLE TaskStatus (
     TaskStatusID      INT IDENTITY(1,1) PRIMARY KEY,
@@ -62,10 +288,14 @@ INSERT INTO TaskStatus (StatusName, StatusDescription) VALUES
 
 CREATE TABLE LevelOfImportance (
     LevelOfImportanceID INT IDENTITY(1,1) PRIMARY KEY,
-    LevelName VARCHAR(20) NOT NULL UNIQUE
+    LevelName VARCHAR(20) NOT NULL UNIQUE,
+    Color VARCHAR(16) NOT NULL
 );
 
-INSERT INTO LevelOfImportance (LevelName) VALUES ('Low'), ('Medium'), ('High');
+INSERT INTO LevelOfImportance (LevelName, Color) VALUES 
+('Low', '#FFFF00'),
+('Medium', '#00FF00'),
+('High', '#FF0000');
 
 CREATE TABLE Tasks (
     TaskID            INT IDENTITY(1,1) PRIMARY KEY,
@@ -73,9 +303,10 @@ CREATE TABLE Tasks (
     TaskStatusID      INT NOT NULL DEFAULT 2,
     UserID            INT NOT NULL,
     GroupID           INT NULL,
-    TaskName          VARCHAR(100) NOT NULL,
+    Ranking           INT NOT NULL,
+    TaskName          NVARCHAR(100) NOT NULL,
     ImportanceLevelID INT NOT NULL DEFAULT 2,
-    Description       VARCHAR(MAX) NULL,
+    Description       NVARCHAR(MAX) NULL,
     CreationDate      DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
     Color             VARCHAR(16) NULL DEFAULT '#FFFFFF',
     FOREIGN KEY (TaskParentID) REFERENCES Tasks(TaskID),
@@ -84,20 +315,183 @@ CREATE TABLE Tasks (
     FOREIGN KEY (UserID) REFERENCES Users(UserID),
     FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
 );
+GO
+
+CREATE PROCEDURE AddTask
+    @TaskParentID INT = NULL,
+    @TaskStatusID INT = 2,
+    @UserID INT,
+    @GroupID INT = NULL,
+    @TaskName NVARCHAR(100),
+    @ImportanceLevelID INT = 2,
+    @Description NVARCHAR(MAX) = NULL,
+    @Color VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    DECLARE @NextRanking INT;
+    SELECT @NextRanking = ISNULL(MAX(Ranking), 0) + 1 FROM Tasks WHERE UserID = @UserID;
+
+    INSERT INTO Tasks
+        (TaskParentID, TaskStatusID, UserID, GroupID, Ranking, TaskName, ImportanceLevelID, Description, Color)
+    VALUES
+        (@TaskParentID, @TaskStatusID, @UserID, @GroupID, @NextRanking, @TaskName, @ImportanceLevelID, @Description, @Color);
+END
+GO
+
+CREATE PROCEDURE UpdateTask
+    @TaskID INT,
+    @TaskParentID INT = NULL,
+    @TaskStatusID INT = 2,
+    @UserID INT,
+    @GroupID INT = NULL,
+    @TaskName NVARCHAR(100),
+    @ImportanceLevelID INT = 2,
+    @Description NVARCHAR(MAX) = NULL,
+    @Color VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    UPDATE Tasks
+    SET TaskParentID = @TaskParentID,
+        TaskStatusID = @TaskStatusID,
+        UserID = @UserID,
+        GroupID = @GroupID,
+        TaskName = @TaskName,
+        ImportanceLevelID = @ImportanceLevelID,
+        Description = @Description,
+        Color = @Color
+    WHERE TaskID = @TaskID;
+END
+GO
+
+CREATE PROCEDURE UpdateRanking
+    @TaskID INT,
+    @Ranking INT
+AS
+BEGIN
+    UPDATE Tasks
+    SET Ranking = @Ranking
+    WHERE TaskID = @TaskID;
+END
+GO
+
+CREATE PROCEDURE DeleteTask
+    @TaskID INT
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION
+        DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
+        INSERT INTO @TasksToDelete (TaskID) VALUES (@TaskID);
+
+        DECLARE @RowsAdded INT = 1;
+        WHILE @RowsAdded > 0
+        BEGIN
+            INSERT INTO @TasksToDelete (TaskID)
+            SELECT T.TaskID FROM Tasks T
+            JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
+            WHERE T.TaskID NOT IN (SELECT TaskID FROM @TasksToDelete);
+
+            SET @RowsAdded = @@ROWCOUNT;
+        END
+
+        DELETE FROM Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Planned     WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        DELETE FROM Tasks       WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+    END CATCH
+END
+GO
+
+CREATE PROCEDURE GetTask
+    @TaskID INT
+AS
+BEGIN
+    SELECT * FROM Tasks WHERE TaskID = @TaskID;
+END
+GO
+
+CREATE PROCEDURE GetTaskParents
+    @UserID INT
+AS
+BEGIN
+    SELECT * FROM Tasks WHERE TaskParentID IS NULL AND UserID = @UserID ORDER BY Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTaskChildrens
+    @TaskParentID INT
+AS
+BEGIN
+    SELECT * FROM Tasks WHERE TaskParentID = @TaskParentID ORDER BY Ranking;
+END
+GO
 
 CREATE TABLE Attachments (
     AttachmentID INT IDENTITY(1,1) PRIMARY KEY,
     TaskID       INT NOT NULL FOREIGN KEY REFERENCES Tasks(TaskID),
-    FileName     NVARCHAR(MAX),
+    FileName     NVARCHAR(260),
     FileData     VARBINARY(MAX),
     FileSizeKB   INT
 );
+GO
+
+CREATE PROCEDURE AddAttachment
+    @TaskID INT,
+    @FileName NVARCHAR(260),
+    @FileData VARBINARY(MAX),
+    @FileSizeKB INT
+AS
+BEGIN
+    INSERT INTO Attachments (TaskID, FileName, FileData, FileSizeKB)
+    VALUES (@TaskID, @FileName, @FileData, @FileSizeKB);
+END
+GO
+
+CREATE PROCEDURE DeleteAttachment
+    @AttachmentID INT
+AS
+BEGIN
+    DELETE FROM Attachments WHERE AttachmentID = @AttachmentID;
+END
+GO
 
 CREATE TABLE Assigned (
     AssignedID INT IDENTITY(1,1) PRIMARY KEY,
     TaskID     INT FOREIGN KEY REFERENCES Tasks(TaskID),
     ToUserID   INT FOREIGN KEY REFERENCES Users(UserID)
 );
+GO
+
+CREATE PROCEDURE AddAssignTask
+    @TaskID INT,
+    @ToUserID INT
+AS
+BEGIN
+    INSERT INTO Assigned (TaskID, ToUserID)
+    VALUES (@TaskID, @ToUserID);
+END
+GO
+
+CREATE PROCEDURE DeleteAssignedTask
+    @AssignedID INT
+AS
+BEGIN
+    DELETE FROM Assigned WHERE AssignedID = @AssignedID;
+END
+GO
+
+CREATE PROCEDURE GetAssignedTasks
+    @UserID INT
+AS
+BEGIN
+    SELECT A.* FROM Assigned A JOIN Tasks T ON A.TaskID = T.TaskID WHERE A.ToUserID = @UserID
+    ORDER BY T.Ranking;
+END
+GO
 
 CREATE TABLE RepetitionTypes (
     RepetitionTypeID INT IDENTITY(1,1) PRIMARY KEY,
@@ -114,3 +508,108 @@ CREATE TABLE Planned (
     PlannedEndDate   DATETIME2 NULL,
     RepetitionTypeID INT FOREIGN KEY REFERENCES RepetitionTypes(RepetitionTypeID)
 );
+GO
+
+CREATE PROCEDURE AddPlanned
+    @TaskID INT,
+    @PlannedStartDate DATETIME2,
+    @PlannedEndDate DATETIME2 = NULL,
+    @RepetitionTypeID INT = 1
+AS
+BEGIN
+    INSERT INTO Planned (TaskID, PlannedStartDate, PlannedEndDate, RepetitionTypeID)
+    VALUES (@TaskID, @PlannedStartDate, @PlannedEndDate, @RepetitionTypeID);
+END
+GO
+
+CREATE PROCEDURE UpdatePlanned
+    @PlannedID INT,
+    @TaskID INT,
+    @PlannedStartDate DATETIME2,
+    @PlannedEndDate DATETIME2 = NULL,
+    @RepetitionTypeID INT = 1
+AS
+BEGIN
+    UPDATE Planned
+    SET TaskID = @TaskID,
+        PlannedStartDate = @PlannedStartDate,
+        PlannedEndDate = @PlannedEndDate,
+        RepetitionTypeID = @RepetitionTypeID
+    WHERE PlannedID = @PlannedID;
+END
+GO
+
+CREATE PROCEDURE AutoUpdatePlanneds
+AS
+BEGIN
+    UPDATE Planned
+    SET PlannedStartDate =
+        CASE
+            WHEN RepetitionTypeID = 2 THEN DATEADD(DAY, 1, PlannedStartDate)
+            WHEN RepetitionTypeID = 3 THEN DATEADD(WEEK, 1, PlannedStartDate)
+            WHEN RepetitionTypeID = 4 THEN DATEADD(MONTH, 1, PlannedStartDate)
+            WHEN RepetitionTypeID = 5 THEN DATEADD(YEAR, 1, PlannedStartDate)
+        END
+    WHERE RepetitionTypeID > 1 AND PlannedStartDate < CAST(GETDATE() AS DATE);
+END
+GO
+
+CREATE PROCEDURE DeletePlanned
+    @PlannedID INT
+AS
+BEGIN
+    DELETE FROM Planned WHERE PlannedID = @PlannedID;
+END
+GO
+
+CREATE PROCEDURE GetTasksPlanned
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND T.TaskParentID IS NULL ORDER BY T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksDaily
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID
+      AND CAST(P.PlannedStartDate AS DATE) BETWEEN CAST(GETDATE() AS DATE)
+          AND CAST(ISNULL(P.PlannedEndDate, GETDATE()) AS DATE) ORDER BY T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksWeekly
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 3 ORDER BY T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksMonthly
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 4 ORDER BY T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksYearly
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 5 ORDER BY T.Ranking;
+END
+GO
