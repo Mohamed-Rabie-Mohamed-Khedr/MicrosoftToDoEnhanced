@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Core/Core.csproj" Id="5cf26539-91c2-43d3-8963-e211c4621a85" />
+  <Project Path="General/General.csproj" Id="cb601d36-cb23-4870-8622-77ead3a634db" />
   <Project Path="MicrosoftToDoEnhanced/MicrosoftToDoEnhanced.csproj" Id="4c75721b-c045-4bb4-ad6f-e2e0307806ed" />
 </Solution>

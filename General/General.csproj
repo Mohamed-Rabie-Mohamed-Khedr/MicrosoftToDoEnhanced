@@ -6,12 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\General\General.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Resource Include="SQL\CreateDatabase.txt" />
-  </ItemGroup>
-
 </Project>

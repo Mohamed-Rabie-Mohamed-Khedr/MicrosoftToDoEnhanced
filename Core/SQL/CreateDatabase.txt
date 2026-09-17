@@ -433,9 +433,9 @@ GO
 CREATE TABLE Attachments (
     AttachmentID INT IDENTITY(1,1) PRIMARY KEY,
     TaskID       INT NOT NULL FOREIGN KEY REFERENCES Tasks(TaskID),
-    FileName     NVARCHAR(260),
-    FileData     VARBINARY(MAX),
-    FileSizeKB   INT
+    FileName     NVARCHAR(260) NOT NULL,
+    FileData     VARBINARY(MAX) NOT NULL,
+    FileSizeKB   INT NOT NULL
 );
 GO
 
@@ -461,8 +461,8 @@ GO
 
 CREATE TABLE Assigned (
     AssignedID INT IDENTITY(1,1) PRIMARY KEY,
-    TaskID     INT FOREIGN KEY REFERENCES Tasks(TaskID),
-    ToUserID   INT FOREIGN KEY REFERENCES Users(UserID)
+    TaskID     INT NOT NULL FOREIGN KEY REFERENCES Tasks(TaskID),
+    ToUserID   INT NOT NULL FOREIGN KEY REFERENCES Users(UserID)
 );
 GO
 
@@ -503,7 +503,7 @@ INSERT INTO RepetitionTypes (RepetitionName) VALUES
 
 CREATE TABLE Planned (
     PlannedID        INT IDENTITY(1,1) PRIMARY KEY,
-    TaskID           INT FOREIGN KEY REFERENCES Tasks(TaskID),
+    TaskID           INT NOT NULL FOREIGN KEY REFERENCES Tasks(TaskID),
     PlannedStartDate DATETIME2 NOT NULL,
     PlannedEndDate   DATETIME2 NULL,
     RepetitionTypeID INT FOREIGN KEY REFERENCES RepetitionTypes(RepetitionTypeID)
