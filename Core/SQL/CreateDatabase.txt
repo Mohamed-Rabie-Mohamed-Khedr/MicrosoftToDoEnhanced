@@ -169,7 +169,6 @@ AS
 BEGIN
     BEGIN TRY
         BEGIN TRANSACTION
-
         DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
         INSERT INTO @TasksToDelete (TaskID)
         SELECT TaskID FROM Tasks WHERE GroupID = @GroupID AND TaskParentID IS NULL;
@@ -268,6 +267,7 @@ AS
 BEGIN
     DECLARE @PostCount INT = 10;
     DECLARE @EndCount INT = @StartCount - @PostCount;
+    IF @EndCount < 1 SET @EndCount = 1;
 
     SELECT * FROM PostsInGroups
     WHERE GroupID = @GroupID AND PostID BETWEEN @EndCount AND @StartCount
@@ -298,20 +298,20 @@ INSERT INTO LevelOfImportance (LevelName, Color) VALUES
 ('High', '#FF0000');
 
 CREATE TABLE Tasks (
-    TaskID            INT IDENTITY(1,1) PRIMARY KEY,
-    TaskParentID      INT NULL,
-    TaskStatusID      INT NOT NULL DEFAULT 2,
-    UserID            INT NOT NULL,
-    GroupID           INT NULL,
-    Ranking           INT NOT NULL,
-    TaskName          NVARCHAR(100) NOT NULL,
-    ImportanceLevelID INT NOT NULL DEFAULT 2,
-    Description       NVARCHAR(MAX) NULL,
-    CreationDate      DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
-    Color             VARCHAR(16) NULL DEFAULT '#FFFFFF',
+    TaskID              INT IDENTITY(1,1) PRIMARY KEY,
+    TaskParentID        INT NULL,
+    TaskStatusID        INT NOT NULL DEFAULT 2,
+    UserID              INT NOT NULL,
+    GroupID             INT NULL,
+    Ranking             INT NOT NULL,
+    TaskName            NVARCHAR(100) NOT NULL,
+    LevelOfImportanceID INT NOT NULL DEFAULT 2,
+    Description         NVARCHAR(MAX) NULL,
+    CreationDate        DATE NOT NULL DEFAULT CAST(GETDATE() AS DATE),
+    Color               VARCHAR(16) NULL DEFAULT '#FFFFFF',
     FOREIGN KEY (TaskParentID) REFERENCES Tasks(TaskID),
     FOREIGN KEY (TaskStatusID) REFERENCES TaskStatus(TaskStatusID),
-    FOREIGN KEY (ImportanceLevelID) REFERENCES LevelOfImportance(LevelOfImportanceID),
+    FOREIGN KEY (LevelOfImportanceID) REFERENCES LevelOfImportance(LevelOfImportanceID),
     FOREIGN KEY (UserID) REFERENCES Users(UserID),
     FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
 );
@@ -332,7 +332,7 @@ BEGIN
     SELECT @NextRanking = ISNULL(MAX(Ranking), 0) + 1 FROM Tasks WHERE UserID = @UserID;
 
     INSERT INTO Tasks
-        (TaskParentID, TaskStatusID, UserID, GroupID, Ranking, TaskName, ImportanceLevelID, Description, Color)
+        (TaskParentID, TaskStatusID, UserID, GroupID, Ranking, TaskName, LevelOfImportanceID, Description, Color)
     VALUES
         (@TaskParentID, @TaskStatusID, @UserID, @GroupID, @NextRanking, @TaskName, @ImportanceLevelID, @Description, @Color);
 END
@@ -356,7 +356,7 @@ BEGIN
         UserID = @UserID,
         GroupID = @GroupID,
         TaskName = @TaskName,
-        ImportanceLevelID = @ImportanceLevelID,
+        LevelOfImportanceID = @ImportanceLevelID,
         Description = @Description,
         Color = @Color
     WHERE TaskID = @TaskID;
@@ -414,19 +414,30 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE GetTaskParents
+CREATE PROCEDURE GetTaskParentsByRanking
     @UserID INT
 AS
 BEGIN
-    SELECT * FROM Tasks WHERE TaskParentID IS NULL AND UserID = @UserID ORDER BY Ranking;
+    SELECT * FROM Tasks WHERE TaskParentID IS NULL AND UserID = @UserID
+    ORDER BY Ranking, LevelOfImportanceID DESC;
 END
 GO
 
-CREATE PROCEDURE GetTaskChildrens
+CREATE PROCEDURE GetTaskParentsByImportance
+    @UserID INT
+AS
+BEGIN
+    SELECT * FROM Tasks WHERE TaskParentID IS NULL AND UserID = @UserID
+    ORDER BY LevelOfImportanceID DESC, Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTaskChildrensByRanking
     @TaskParentID INT
 AS
 BEGIN
-    SELECT * FROM Tasks WHERE TaskParentID = @TaskParentID ORDER BY Ranking;
+    SELECT * FROM Tasks WHERE TaskParentID = @TaskParentID
+    ORDER BY Ranking;
 END
 GO
 
@@ -484,12 +495,21 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE GetAssignedTasks
+CREATE PROCEDURE GetAssignedTasksByRanking
     @UserID INT
 AS
 BEGIN
     SELECT A.* FROM Assigned A JOIN Tasks T ON A.TaskID = T.TaskID WHERE A.ToUserID = @UserID
-    ORDER BY T.Ranking;
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
+END
+GO
+
+CREATE PROCEDURE GetAssignedTasksByImportance
+    @UserID INT
+AS
+BEGIN
+    SELECT A.* FROM Assigned A JOIN Tasks T ON A.TaskID = T.TaskID WHERE A.ToUserID = @UserID
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
 END
 GO
 
@@ -562,17 +582,40 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE GetTasksPlanned
+CREATE PROCEDURE GetTasksPlannedByRanking
     @UserID INT
 AS
 BEGIN
     SELECT P.* FROM Planned P
     JOIN Tasks T ON P.TaskID = T.TaskID
-    WHERE T.UserID = @UserID AND T.TaskParentID IS NULL ORDER BY T.Ranking;
+    WHERE T.UserID = @UserID AND T.TaskParentID IS NULL
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
 END
 GO
 
-CREATE PROCEDURE GetTasksDaily
+CREATE PROCEDURE GetTasksPlannedByDate
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND T.TaskParentID IS NULL
+    ORDER BY P.PlannedStartDate, T.LevelOfImportanceID DESC;
+END
+GO
+
+CREATE PROCEDURE GetTasksPlannedByImportance
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND T.TaskParentID IS NULL
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksDailyByRanking
     @UserID INT
 AS
 BEGIN
@@ -580,36 +623,86 @@ BEGIN
     JOIN Tasks T ON P.TaskID = T.TaskID
     WHERE T.UserID = @UserID
       AND CAST(P.PlannedStartDate AS DATE) BETWEEN CAST(GETDATE() AS DATE)
-          AND CAST(ISNULL(P.PlannedEndDate, GETDATE()) AS DATE) ORDER BY T.Ranking;
+          AND CAST(ISNULL(P.PlannedEndDate, GETDATE()) AS DATE)
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
 END
 GO
 
-CREATE PROCEDURE GetTasksWeekly
+CREATE PROCEDURE GetTasksDailyByImportance
     @UserID INT
 AS
 BEGIN
     SELECT P.* FROM Planned P
     JOIN Tasks T ON P.TaskID = T.TaskID
-    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 3 ORDER BY T.Ranking;
+    WHERE T.UserID = @UserID
+      AND CAST(P.PlannedStartDate AS DATE) BETWEEN CAST(GETDATE() AS DATE)
+          AND CAST(ISNULL(P.PlannedEndDate, GETDATE()) AS DATE)
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
 END
 GO
 
-CREATE PROCEDURE GetTasksMonthly
+CREATE PROCEDURE GetTasksWeeklyByRanking
     @UserID INT
 AS
 BEGIN
     SELECT P.* FROM Planned P
     JOIN Tasks T ON P.TaskID = T.TaskID
-    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 4 ORDER BY T.Ranking;
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 3
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
 END
 GO
 
-CREATE PROCEDURE GetTasksYearly
+CREATE PROCEDURE GetTasksWeeklyByImportance
     @UserID INT
 AS
 BEGIN
     SELECT P.* FROM Planned P
     JOIN Tasks T ON P.TaskID = T.TaskID
-    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 5 ORDER BY T.Ranking;
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 3
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksMonthlyByRanking
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 4
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
+END
+GO
+
+CREATE PROCEDURE GetTasksMonthlyByImportance
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 4
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
+END
+GO
+
+CREATE PROCEDURE GetTasksYearlyByRanking
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 5
+    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
+END
+GO
+
+CREATE PROCEDURE GetTasksYearlyByImportance
+    @UserID INT
+AS
+BEGIN
+    SELECT P.* FROM Planned P
+    JOIN Tasks T ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND P.RepetitionTypeID = 5
+    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
 END
 GO

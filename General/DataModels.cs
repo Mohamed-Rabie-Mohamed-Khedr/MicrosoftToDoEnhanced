@@ -140,7 +140,7 @@ public class TodoTask
     public int? GroupID { get; set; }
     public int Ranking { get; set; }
     public string TaskName { get; set; }
-    public int ImportanceLevelID { get; set; }
+    public int LevelOfImportanceID { get; set; }
     public string Description { get; set; }
     public DateTime CreationDate { get; set; }
     public string Color { get; set; }
@@ -162,7 +162,7 @@ public class TodoTask
 
         Ranking = Convert.ToInt32(dr["Ranking"]);
         TaskName = dr["TaskName"].ToString();
-        ImportanceLevelID = Convert.ToInt32(dr["ImportanceLevelID"]);
+        LevelOfImportanceID = Convert.ToInt32(dr["LevelOfImportanceID"]);
 
         if (dr["Description"] != DBNull.Value)
             Description = dr["Description"].ToString();
