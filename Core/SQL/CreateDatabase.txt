@@ -260,7 +260,7 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE GetPostsInGroup
+CREATE PROCEDURE GetPreviousCommentsInGroup
     @GroupID INT,
     @StartCount INT
 AS
@@ -370,6 +370,17 @@ AS
 BEGIN
     UPDATE Tasks
     SET Ranking = @Ranking
+    WHERE TaskID = @TaskID;
+END
+GO
+
+CREATE PROCEDURE UpdateTaskStatus
+    @TaskID INT,
+    @TaskStatusID INT
+AS
+BEGIN
+    UPDATE Tasks
+    SET TaskStatusID = @TaskStatusID
     WHERE TaskID = @TaskID;
 END
 GO
