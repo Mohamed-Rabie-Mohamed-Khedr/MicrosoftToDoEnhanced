@@ -1,0 +1,304 @@
+<UserControl x:Class="MicrosoftToDoEnhanced.Views.TaskDetailPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:MicrosoftToDoEnhanced.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="360"
+             Background="{DynamicResource CardBackgroundBrush}">
+
+    <!-- Placeholder bindings (DataContext = SelectedTask):
+         TaskName, IsCompleted, Description, Color, LevelName,
+         DueDate, EndDate (DateTime?), SelectedRecurrence, RecurrenceOptions,
+         Steps (ObservableCollection), NewStepTitle, AddStepCommand, ToggleStepCommand, RemoveStepCommand,
+         Attachments (ObservableCollection), AddAttachmentCommand, RemoveAttachmentCommand,
+         AssignedToName, AssignedToColor, Assignees, SelectedAssignee,
+         DeleteTaskCommand, SaveTaskCommand
+         Parent VM commands resolved via Tag: CloseDetailsCommand
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== Header ===== -->
+        <Grid Grid.Row="0" Margin="16,12,8,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center" Margin="0,0,8,0"
+                        Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
+                <TextBlock Text="Task details" Style="{StaticResource SectionTitleTextStyle}"/>
+            </StackPanel>
+            <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" ToolTip="Close details"
+                    Command="{Binding DataContext.CloseDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                <Path Width="10" Height="10" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      Data="M0,1.4 L1.4,0 L5,3.6 L8.6,0 L10,1.4 L6.4,5 L10,8.6 L8.6,10 L5,6.4 L1.4,10 L0,8.6 L3.6,5 Z"/>
+            </Button>
+        </Grid>
+
+        <Separator Grid.Row="0" VerticalAlignment="Bottom" Background="{DynamicResource DividerBrush}"/>
+
+        <!-- ===== Body ===== -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,8,16,16">
+            <StackPanel>
+
+                <!-- Title row: complete toggle + editable name -->
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <CheckBox Style="{StaticResource AccentCheckBoxStyle}" VerticalAlignment="Top" Margin="0,8,10,0"
+                              IsChecked="{Binding IsCompleted, Mode=TwoWay}"/>
+                    <TextBox Grid.Column="1" Text="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="16" FontWeight="SemiBold" Background="Transparent" BorderThickness="0"
+                             Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"
+                             CaretBrush="{DynamicResource AccentBrush}"/>
+                </Grid>
+
+                <!-- Importance -->
+                <TextBlock Text="Importance" Style="{StaticResource CaptionTextStyle}" Margin="0,16,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <ToggleButton Content="Low" Margin="0,0,6,0" Padding="12,6" Cursor="Hand"
+                                  IsChecked="{Binding IsLow}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="MinHeight" Value="28"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource PriorityLowBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <ToggleButton Content="Medium" Margin="0,0,6,0" Padding="12,6" Cursor="Hand"
+                                  IsChecked="{Binding IsMedium}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="MinHeight" Value="28"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource PriorityMediumBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <ToggleButton Content="High" Padding="12,6" Cursor="Hand"
+                                  IsChecked="{Binding IsHigh}">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="MinHeight" Value="28"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource PriorityHighBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                </StackPanel>
+
+                <!-- Schedule -->
+                <TextBlock Text="Schedule" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
+                <Border Style="{StaticResource CardStyle}" Padding="12" Effect="{x:Null}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Due" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" Width="76"/>
+                            <DatePicker Grid.Column="1" Style="{StaticResource ModernDatePickerStyle}"
+                                        SelectedDate="{Binding DueDate}"/>
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="End" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" Width="76"/>
+                            <DatePicker Grid.Column="1" Style="{StaticResource ModernDatePickerStyle}"
+                                        SelectedDate="{Binding EndDate}"/>
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Repeat" Style="{StaticResource SecondaryTextStyle}" VerticalAlignment="Center" Width="76"/>
+                            <ComboBox Grid.Column="1" Style="{StaticResource ModernComboBoxStyle}"
+                                      ItemContainerStyle="{StaticResource ModernComboBoxItemStyle}"
+                                      ItemsSource="{Binding RecurrenceOptions}"
+                                      SelectedItem="{Binding SelectedRecurrence}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Steps (subtasks) -->
+                <Grid Margin="0,18,0,6">
+                    <TextBlock Text="Steps" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
+                    <TextBlock HorizontalAlignment="Right" Style="{StaticResource CaptionTextStyle}"
+                               Text="{Binding StepsSummary}"/>
+                </Grid>
+
+                <Border Style="{StaticResource CardStyle}" Padding="8,6" Effect="{x:Null}">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding Steps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="4,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Style="{StaticResource AccentCheckBoxStyle}" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsCompleted, Mode=TwoWay}"
+                                                  Command="{Binding DataContext.ToggleStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  CommandParameter="{Binding}"/>
+                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="13" Margin="8,0,0,0"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding Title}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
+                                                            <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}" Width="24" Height="24"
+                                                ToolTip="Remove step"
+                                                Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Path Width="8" Height="8" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                  Data="M0,1.2 L1.2,0 L4,2.8 L6.8,0 L8,1.2 L5.2,4 L8,6.8 L6.8,8 L4,5.2 L1.2,8 L0,6.8 L2.8,4 Z"/>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Add a step -->
+                        <Grid Margin="4,4,4,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="18" Height="18" CornerRadius="9" VerticalAlignment="Center" Margin="0,0,10,0"
+                                    BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1.2">
+                                <Path Width="8" Height="8" Stretch="Uniform" Fill="{DynamicResource AccentBrush}"
+                                      Data="M3,0 h2 v3 h3 v2 h-3 v3 h-2 v-3 h-3 v-2 h3 Z"/>
+                            </Border>
+                            <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}" MinHeight="28"
+                                     Background="Transparent" BorderThickness="0"
+                                     Text="{Binding NewStepTitle, UpdateSourceTrigger=PropertyChanged}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Return" Command="{Binding AddStepCommand}"/>
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <TextBlock Grid.Column="1" IsHitTestVisible="False" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       Style="{StaticResource CaptionTextStyle}" Text="Add a step"
+                                       Visibility="{Binding NewStepTitle, Converter={StaticResource NullToVisibilityConverter}}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Assign to -->
+                <TextBlock Text="Assigned to" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
+                <ComboBox Style="{StaticResource ModernComboBoxStyle}"
+                          ItemContainerStyle="{StaticResource ModernComboBoxItemStyle}"
+                          ItemsSource="{Binding Assignees}"
+                          SelectedItem="{Binding SelectedAssignee}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="18" Height="18"
+                                         Fill="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
+                                <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           Text="{Binding ShowName}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <!-- Attachments -->
+                <Grid Margin="0,18,0,6">
+                    <TextBlock Text="Attachments" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
+                    <Button HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}" Content="+ Add file"
+                            Command="{Binding AddAttachmentCommand}"/>
+                </Grid>
+
+                <Border Style="{StaticResource CardStyle}" Padding="8" Effect="{x:Null}"
+                        Visibility="{Binding HasAttachments, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ItemsControl ItemsSource="{Binding Attachments}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="4,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="30" Height="30" CornerRadius="8" VerticalAlignment="Center"
+                                            Background="{DynamicResource AccentSubtleBrush}">
+                                        <Path Width="13" Height="13" Stretch="Uniform" Fill="{DynamicResource AccentBrush}"
+                                              Data="M2,0 h6 l3,3 v10 h-9 Z M7.5,0.5 L10.5,3.5 h-3 Z M3.5,8 h6 v1 h-6 Z M3.5,9.5 h6 v1 h-6 Z"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock FontSize="12.5" Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" Text="{Binding FileName}"/>
+                                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                                   Text="{Binding FileSizeKB, Converter={StaticResource FileSizeConverter}}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}" Width="24" Height="24"
+                                            ToolTip="Remove attachment"
+                                            Command="{Binding DataContext.RemoveAttachmentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}">
+                                        <Path Width="9" Height="9" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              Data="M1,1.5 h1 v6.5 h7 v1 h-8 Z M3,0 h4 l1,1 h3 v1 h-10 v-1 h1 Z"/>
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
+                <!-- Description / notes -->
+                <TextBlock Text="Notes" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
+                <TextBox Style="{StaticResource ModernTextBoxStyle}" MinHeight="80" AcceptsReturn="True"
+                         TextWrapping="Wrap" VerticalContentAlignment="Top" Padding="12,10"
+                         Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ===== Footer ===== -->
+        <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+            <Grid>
+                <Button Style="{StaticResource DangerButtonStyle}" MinHeight="30" Padding="12,0"
+                        HorizontalAlignment="Left" Content="Delete task"
+                        Command="{Binding DeleteTaskCommand}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="0,0,12,0"
+                               Text="{Binding CreationDate, StringFormat='Created {0:MMM d, yyyy}'}"/>
+                    <Button Style="{StaticResource PrimaryButtonStyle}" MinHeight="30" Content="Save"
+                            Command="{Binding SaveTaskCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

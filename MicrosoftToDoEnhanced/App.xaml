@@ -2,8 +2,25 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:MicrosoftToDoEnhanced"
-             StartupUri="MainWindow.xaml">
+             xmlns:conv="clr-namespace:MicrosoftToDoEnhanced.Converters"
+             StartupUri="Views/LoginView.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Theme is re-merged by ThemeManager when toggling Light/Dark -->
+                <ResourceDictionary Source="Themes/LightTheme.xaml"/>
+                <ResourceDictionary Source="Styles/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Shared value converters -->
+            <conv:HexToBrushConverter x:Key="HexToBrushConverter"/>
+            <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+            <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <conv:RelativeDateConverter x:Key="RelativeDateConverter"/>
+            <conv:FileSizeConverter x:Key="FileSizeConverter"/>
+            <conv:InitialsConverter x:Key="InitialsConverter"/>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>
