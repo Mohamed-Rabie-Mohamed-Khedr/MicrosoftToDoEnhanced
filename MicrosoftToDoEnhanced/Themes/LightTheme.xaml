@@ -21,7 +21,7 @@
     <Color x:Key="TextTertiaryColor">#8A8A8A</Color>
 
     <!-- ============ Accent ============ -->
-    <Color x:Key="AccentColor">#0067C0</Color>
+    <Color x:Key="AccentColor">#0078D4</Color>
     <Color x:Key="AccentHoverColor">#1975C5</Color>
     <Color x:Key="AccentPressedColor">#005A9E</Color>
     <Color x:Key="AccentSubtleColor">#E8F2FB</Color>
@@ -57,7 +57,7 @@
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
     <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiaryColor}"/>
 
-    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/>
     <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
     <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}"/>
     <SolidColorBrush x:Key="AccentSubtleBrush" Color="{StaticResource AccentSubtleColor}"/>

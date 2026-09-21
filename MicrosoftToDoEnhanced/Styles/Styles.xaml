@@ -505,7 +505,7 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}"/>
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentSubtleBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

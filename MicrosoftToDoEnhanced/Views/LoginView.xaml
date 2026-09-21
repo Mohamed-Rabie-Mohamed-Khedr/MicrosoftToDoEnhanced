@@ -6,15 +6,15 @@
         xmlns:local="clr-namespace:MicrosoftToDoEnhanced"
         mc:Ignorable="d"
         Title="Microsoft To Do Enhanced — Sign in"
-        Height="560" Width="920" MinHeight="520" MinWidth="840"
+        Height="680" Width="920" MinHeight="640" MinWidth="840"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanMinimize"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
 
     <!-- Placeholder bindings: IsRegisterMode, LoginEmail, LoginPassword, RegisterDisplayName,
-         RegisterEmail, RegisterPassword, SelectedAccentColor, LoginCommand, RegisterCommand,
-         ToggleModeCommand, IsBusy, ErrorMessage -->
+         RegisterEmail, RegisterPassword, LoginCommand, ToggleModeCommand,
+         IsBusy, ErrorMessage. Registration is handled in code-behind (CreateAccount_Click). -->
     <Grid>
         <!-- Decorative gradient blobs (Fluent accent) -->
         <Ellipse Width="420" Height="420" HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -93,47 +93,61 @@
                         <TextBlock Text="Pick a name, email and your accent color" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,20"/>
 
                         <TextBlock Text="Display name" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4"/>
-                        <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterDisplayName, UpdateSourceTrigger=PropertyChanged}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBox x:Name="RegisterDisplayNameTextBox" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterDisplayName, UpdateSourceTrigger=PropertyChanged}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBlock x:Name="DisplayNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                        <TextBlock Text="User name" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
+                        <TextBox x:Name="UserNameTextBox" Style="{StaticResource ModernTextBoxStyle}" FontWeight="Bold" BorderThickness="2,2,2,2"/>
+                        <TextBlock x:Name="UserNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
                         <TextBlock Text="Email" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
-                        <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterEmail, UpdateSourceTrigger=PropertyChanged}" FontWeight="Black" BorderThickness="2,2,2,2"/>
+                        <TextBox x:Name="RegisterEmailTextBox" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterEmail, UpdateSourceTrigger=PropertyChanged}" FontWeight="Black" BorderThickness="2,2,2,2"/>
 
                         <TextBlock Text="Password" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
                         <PasswordBox x:Name="RegisterPasswordBox" Style="{StaticResource ModernPasswordBoxStyle}"
                                  PasswordChanged="OnRegisterPasswordChanged" FontWeight="Black" BorderThickness="2,2,2,2"/>
+                        <TextBlock x:Name="PasswordErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
-                        <TextBlock x:Name="YourAccentColorB" Text="Your accent color" Style="{StaticResource CaptionTextStyle}" Margin="0,14,0,6" Foreground="#FF0067C0" TextAlignment="Center" Cursor="Hand" MouseUp="YourAccentColorB_MouseUp"/>
-                        <ListBox ItemsSource="{Binding AccentColorChoices}" SelectedItem="{Binding SelectedAccentColor}"
-                             Style="{StaticResource FluentListBoxStyle}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <ListBox.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel/>
-                                </ItemsPanelTemplate>
-                            </ListBox.ItemsPanel>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Ellipse Width="26" Height="26" Margin="3"
-                                         Fill="{Binding ., Converter={StaticResource HexToBrushConverter}}"/>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource FluentListBoxItemStyle}">
-                                    <Setter Property="Padding" Value="3"/>
-                                    <Setter Property="BorderThickness" Value="2"/>
-                                    <Setter Property="BorderBrush" Value="Transparent"/>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                        </ListBox>
+                        <TextBlock Text="Your accent color" Style="{StaticResource CaptionTextStyle}" Margin="0,14,0,6"/>
+                        <StackPanel x:Name="AccentSwatchRow" Orientation="Horizontal">
+                            <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
+                                    Background="Transparent" BorderThickness="3"
+                                    BorderBrush="{DynamicResource TextPrimaryBrush}"
+                                    Tag="#0078D4" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#0078D4" IsHitTestVisible="False"/>
+                            </Border>
+                            <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
+                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Tag="#5C2D91" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#5C2D91" IsHitTestVisible="False"/>
+                            </Border>
+                            <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
+                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Tag="#D83B01" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#D83B01" IsHitTestVisible="False"/>
+                            </Border>
+                            <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
+                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Tag="#107C10" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#107C10" IsHitTestVisible="False"/>
+                            </Border>
+                            <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
+                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Tag="#C239B3" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#C239B3" IsHitTestVisible="False"/>
+                            </Border>
+                            <Border Width="38" Height="38" CornerRadius="19"
+                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Tag="#008575" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Ellipse Width="28" Height="28" Fill="#008575" IsHitTestVisible="False"/>
+                            </Border>
+                        </StackPanel>
 
                         <Button Style="{StaticResource PrimaryButtonStyle}" Content="Create account" Margin="0,18,0,0"
-                            Command="{Binding RegisterCommand}"
-                            CommandParameter="{Binding ElementName=RegisterPasswordBox}"/>
+                            Click="CreateAccount_Click"/>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Already have an account?"/>
