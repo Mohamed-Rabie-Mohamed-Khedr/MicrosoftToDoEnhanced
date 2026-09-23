@@ -12,7 +12,7 @@ INSERT INTO Permissions (PermissionName) VALUES ('Person'), ('Admin');
 
 CREATE TABLE Users (
     UserID       INT IDENTITY(1,1) PRIMARY KEY,
-    UserName     VARCHAR(100) NOT NULL UNIQUE,
+    UserName     NVARCHAR(100) NOT NULL UNIQUE,
     ShowName     NVARCHAR(100) NOT NULL,
     UserEmail    VARCHAR(255) NULL,
     PasswordHash VARCHAR(255) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE Users (
 GO
 
 CREATE PROCEDURE AddUser
-    @UserName VARCHAR(100),
+    @UserName NVARCHAR(100),
     @ShowName NVARCHAR(100),
     @UserEmail VARCHAR(255),
     @PasswordHash VARCHAR(255),
@@ -38,7 +38,7 @@ GO
 
 CREATE PROCEDURE UpdateUser
     @UserID INT,
-    @UserName VARCHAR(100),
+    @UserName NVARCHAR(100),
     @ShowName NVARCHAR(100),
     @UserEmail VARCHAR(255),
     @PasswordHash VARCHAR(255),
@@ -113,7 +113,7 @@ BEGIN
 END
 GO
 
-CREATE FUNCTION UserExists (@UserName VARCHAR(100))
+CREATE FUNCTION UserExists (@UserName NVARCHAR(100))
 RETURNS BIT
 AS
 BEGIN
@@ -121,6 +121,16 @@ BEGIN
     IF EXISTS (SELECT 1 FROM Users WHERE UserName = @UserName)
         SET @Exists = 1;
     RETURN @Exists;
+END
+GO
+
+CREATE FUNCTION GetUserPasswordHash (@UserName NVARCHAR(100))
+RETURNS NVARCHAR(255)
+AS
+BEGIN
+    DECLARE @PasswordHash NVARCHAR(255);
+    SELECT @PasswordHash = PasswordHash FROM Users WHERE UserName = @UserName;
+    RETURN @PasswordHash;
 END
 GO
 
@@ -272,6 +282,17 @@ BEGIN
     SELECT * FROM PostsInGroups
     WHERE GroupID = @GroupID AND PostID BETWEEN @EndCount AND @StartCount
     ORDER BY PostID DESC;
+END
+GO
+
+CREATE PROCEDURE GetNextCommentsInGroup
+    @GroupID INT,
+    @StartCount INT
+AS
+BEGIN
+    SELECT * FROM PostsInGroups
+    WHERE GroupID = @GroupID AND PostID > @StartCount
+    ORDER BY PostID ASC;
 END
 GO
 

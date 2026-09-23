@@ -1,6 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- ================================================= -->
     <!--  Geometry / shared bits                           -->
@@ -115,7 +115,7 @@
         </Setter>
     </Style>
 
-    <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+    <Style x:Key="SecondaryButtonStyle" TargetType="ButtonBase">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}"/>
         <Setter Property="Padding" Value="16,0"/>
         <Setter Property="Background" Value="{DynamicResource ChipBackgroundBrush}"/>
@@ -124,7 +124,7 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="Button">
+                <ControlTemplate TargetType="ButtonBase">
                     <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="{StaticResource ControlCornerRadius}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>

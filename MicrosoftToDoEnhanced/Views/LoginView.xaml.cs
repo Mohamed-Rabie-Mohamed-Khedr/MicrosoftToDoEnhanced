@@ -1,6 +1,7 @@
 using System;
 using System.Configuration;
 using System.Data;
+using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -65,10 +66,12 @@ public partial class LoginView : Window
         ThemeManager.ApplyAccentColor(hex);
     }
 
-    private async void CreateAccount_Click(object sender, RoutedEventArgs e)
+    private async void CreateAccountB_Click(object sender, RoutedEventArgs e)
     {
+        CreateAccountB.IsEnabled = false;
         UserNameErrorText.Visibility = Visibility.Collapsed;
         DisplayNameErrorText.Visibility = Visibility.Collapsed;
+        EmailErrorText.Visibility = Visibility.Collapsed;
         PasswordErrorText.Visibility = Visibility.Collapsed;
 
         var userName = UserNameTextBox.Text.Trim();
@@ -98,49 +101,101 @@ public partial class LoginView : Window
             valid = false;
         }
 
-        if (!valid) return;
-
-        var connectionString = ConfigurationManager.ConnectionStrings["MicrosoftToDoEnhanced"]?.ConnectionString;
-        if (string.IsNullOrEmpty(connectionString))
+        if (!string.IsNullOrWhiteSpace(email) && !IsValidEmail(email))
         {
-            ShowUserNameError("Database connection is not configured.");
+            EmailErrorText.Text = "Please enter a valid email address";
+            EmailErrorText.Visibility = Visibility.Visible;
+            valid = false;
+        }
+
+        if (valid)
+        {
+            var connectionString = ConfigurationManager.ConnectionStrings["MicrosoftToDoEnhanced"].ConnectionString;
+
+            try
+            {
+                await using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                using (var existsCommand = new SqlCommand("SELECT dbo.UserExists(@UserName)", connection))
+                {
+                    existsCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
+                    if (Convert.ToBoolean(await existsCommand.ExecuteScalarAsync()))
+                    {
+                        ShowUserNameError("This username is already taken");
+                        CreateAccountB.IsEnabled = true;
+                        return;
+                    }
+                }
+
+                using (var addUserCommand = new SqlCommand("AddUser", connection) { CommandType = CommandType.StoredProcedure })
+                {
+                    addUserCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
+                    addUserCommand.Parameters.Add("@ShowName", SqlDbType.NVarChar, 100).Value = showName;
+                    addUserCommand.Parameters.Add("@UserEmail", SqlDbType.VarChar, 255).Value = string.IsNullOrEmpty(email) ? DBNull.Value : email;
+                    addUserCommand.Parameters.Add("@PasswordHash", SqlDbType.VarChar, 255).Value = HashPassword(password);
+                    addUserCommand.Parameters.Add("@PermissionID", SqlDbType.Int).Value = 1;
+                    addUserCommand.Parameters.Add("@Color", SqlDbType.VarChar, 16).Value = _selectedAccentHex;
+                    await addUserCommand.ExecuteNonQueryAsync();
+                }
+
+                UserNameTextBox.Clear();
+                RegisterPasswordBox.Clear();
+                LoginSP.Visibility = Visibility.Visible;
+                CreateAnAccountSP.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception)
+            {
+                ShowUserNameError("Could not create your account. Check your connection and try again.");
+            }
+        }
+        CreateAccountB.IsEnabled = true;
+    }
+
+    private async void SignIn_Click(object sender, RoutedEventArgs e)
+    {
+        SIB.IsEnabled = false;
+        SignInUserNameErrorText.Visibility = Visibility.Collapsed;
+        SignInErrorText.Visibility = Visibility.Collapsed;
+
+        var userName = SignInUserNameTextBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(userName))
+        {
+            SignInUserNameErrorText.Text = "User name is required";
+            SignInUserNameErrorText.Visibility = Visibility.Visible;
+            SIB.IsEnabled = true;
             return;
         }
 
+        var connectionString = ConfigurationManager.ConnectionStrings["MicrosoftToDoEnhanced"].ConnectionString;
+        
         try
         {
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
+            var storedHashCommand = new SqlCommand("SELECT GetUserPasswordHash(@UserName)", connection);
+            storedHashCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
+            var storedHash = await storedHashCommand.ExecuteScalarAsync() as string;
 
-            using (var existsCommand = new SqlCommand("SELECT dbo.UserExists(@UserName)", connection))
+            var enteredHash = HashPassword(LoginPasswordBox.Password);
+
+            if (string.IsNullOrEmpty(storedHash) || !string.Equals(storedHash, enteredHash, StringComparison.Ordinal))
             {
-                existsCommand.Parameters.Add("@UserName", SqlDbType.VarChar, 100).Value = userName;
-                if (Convert.ToBoolean(await existsCommand.ExecuteScalarAsync()))
-                {
-                    ShowUserNameError("This username is already taken");
-                    return;
-                }
+                SignInErrorText.Text = "Incorrect username or password";
+                SignInErrorText.Visibility = Visibility.Visible;
+                SIB.IsEnabled = true;
+                return;
             }
 
-            using (var addUserCommand = new SqlCommand("AddUser", connection) { CommandType = CommandType.StoredProcedure })
-            {
-                addUserCommand.Parameters.Add("@UserName", SqlDbType.VarChar, 100).Value = userName;
-                addUserCommand.Parameters.Add("@ShowName", SqlDbType.NVarChar, 100).Value = showName;
-                addUserCommand.Parameters.Add("@UserEmail", SqlDbType.VarChar, 255).Value = string.IsNullOrEmpty(email) ? DBNull.Value : email;
-                addUserCommand.Parameters.Add("@PasswordHash", SqlDbType.VarChar, 255).Value = HashPassword(password);
-                addUserCommand.Parameters.Add("@PermissionID", SqlDbType.Int).Value = 1;
-                addUserCommand.Parameters.Add("@Color", SqlDbType.VarChar, 16).Value = _selectedAccentHex;
-                await addUserCommand.ExecuteNonQueryAsync();
-            }
-
-            UserNameTextBox.Clear();
-            RegisterPasswordBox.Clear();
-            LoginSP.Visibility = Visibility.Visible;
-            CreateAnAccountSP.Visibility = Visibility.Collapsed;
+            new global::MicrosoftToDoEnhanced.MainWindow().Show();
+            Close();
         }
         catch (Exception)
         {
-            ShowUserNameError("Could not create your account. Check your connection and try again.");
+            SignInErrorText.Text = "Incorrect username or password";
+            SignInErrorText.Visibility = Visibility.Visible;
+            SIB.IsEnabled = true;
         }
     }
 
@@ -152,4 +207,17 @@ public partial class LoginView : Window
 
     private static string HashPassword(string password) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password)));
+
+    private static bool IsValidEmail(string email)
+    {
+        try
+        {
+            _ = new MailAddress(email);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
 }

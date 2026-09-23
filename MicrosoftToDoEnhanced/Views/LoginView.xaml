@@ -12,9 +12,9 @@
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
 
-    <!-- Placeholder bindings: IsRegisterMode, LoginEmail, LoginPassword, RegisterDisplayName,
-         RegisterEmail, RegisterPassword, LoginCommand, ToggleModeCommand,
-         IsBusy, ErrorMessage. Registration is handled in code-behind (CreateAccount_Click). -->
+    <!-- Placeholder bindings: IsRegisterMode, LoginPassword, RegisterDisplayName,
+         RegisterEmail, RegisterPassword, ToggleModeCommand, IsBusy, ErrorMessage.
+         Sign-in and registration are handled in code-behind (SignIn_Click, CreateAccount_Click). -->
     <Grid>
         <!-- Decorative gradient blobs (Fluent accent) -->
         <Ellipse Width="420" Height="420" HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -61,26 +61,24 @@
             <Border Style="{StaticResource CardStyle}" Grid.Column="1" Padding="28" Effect="{StaticResource PopupShadow}">
                 <Grid>
                     <!-- ============ SIGN IN ============ -->
-                    <StackPanel x:Name="LoginSP" d:IsHidden="True" Visibility="Hidden">
+                    <StackPanel x:Name="LoginSP">
                         <TextBlock Text="Welcome back" Style="{StaticResource PageTitleTextStyle}" FontSize="22"/>
                         <TextBlock Text="Sign in to continue to your tasks" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,20"/>
 
-                        <TextBlock Text="Email" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4"/>
-                        <TextBox Style="{StaticResource ModernTextBoxStyle}" Text="{Binding LoginEmail, UpdateSourceTrigger=PropertyChanged}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBlock Text="User name" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4"/>
+                        <TextBox x:Name="SignInUserNameTextBox" Style="{StaticResource ModernTextBoxStyle}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBlock x:Name="SignInUserNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
                         <TextBlock Text="Password" Style="{StaticResource CaptionTextStyle}" Margin="0,14,0,4"/>
                         <PasswordBox x:Name="LoginPasswordBox" Style="{StaticResource ModernPasswordBoxStyle}"
                                  PasswordChanged="OnLoginPasswordChanged" BorderThickness="2,2,2,2" FontWeight="Bold"/>
 
-                        <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="0,10,0,0"
-                               Foreground="{DynamicResource DangerBrush}"
-                               Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"
-                               Text="{Binding ErrorMessage}"/>
+                        <TextBlock x:Name="SignInErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,10,0,0"
+                               Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
-                        <Button Style="{StaticResource PrimaryButtonStyle}" Content="Sign in" Margin="0,18,0,0"
-                            Command="{Binding LoginCommand}"
-                            CommandParameter="{Binding ElementName=LoginPasswordBox}"/>
-
+                        <Button x:Name="SIB" Style="{StaticResource PrimaryButtonStyle}" Content="Sign in" Margin="0,18,0,0"
+                            Click="SignIn_Click"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="New here?"/>
                             <Button x:Name="CreateAnAccountB" Style="{StaticResource LinkButtonStyle}" Content="Create an account" Click="CreateAnAccountB_Click"/>
@@ -88,7 +86,7 @@
                     </StackPanel>
 
                     <!-- ============ REGISTER ============ -->
-                    <StackPanel x:Name="CreateAnAccountSP">
+                    <StackPanel x:Name="CreateAnAccountSP" d:IsHidden="True" Visibility="Hidden">
                         <TextBlock Text="Create account" Style="{StaticResource PageTitleTextStyle}" FontSize="22"/>
                         <TextBlock Text="Pick a name, email and your accent color" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,20"/>
 
@@ -104,6 +102,8 @@
 
                         <TextBlock Text="Email" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
                         <TextBox x:Name="RegisterEmailTextBox" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterEmail, UpdateSourceTrigger=PropertyChanged}" FontWeight="Black" BorderThickness="2,2,2,2"/>
+                        <TextBlock x:Name="EmailErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
 
                         <TextBlock Text="Password" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
                         <PasswordBox x:Name="RegisterPasswordBox" Style="{StaticResource ModernPasswordBoxStyle}"
@@ -146,8 +146,8 @@
                             </Border>
                         </StackPanel>
 
-                        <Button Style="{StaticResource PrimaryButtonStyle}" Content="Create account" Margin="0,18,0,0"
-                            Click="CreateAccount_Click"/>
+                        <Button x:Name="CreateAccountB" Style="{StaticResource PrimaryButtonStyle}" Content="Create account" Margin="0,18,0,0"
+                            Click="CreateAccountB_Click"/>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Already have an account?"/>
