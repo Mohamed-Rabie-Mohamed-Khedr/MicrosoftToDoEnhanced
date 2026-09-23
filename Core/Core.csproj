@@ -11,6 +11,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.18" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="SQL\CreateDatabase.txt" />
   </ItemGroup>
 

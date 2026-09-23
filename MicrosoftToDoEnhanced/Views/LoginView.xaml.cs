@@ -1,6 +1,4 @@
 using System;
-using System.Configuration;
-using System.Data;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,7 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using Microsoft.Data.SqlClient;
+using Core.Repositories;
 using MicrosoftToDoEnhanced.Themes;
 
 namespace MicrosoftToDoEnhanced.Views;
@@ -110,34 +108,22 @@ public partial class LoginView : Window
 
         if (valid)
         {
-            var connectionString = ConfigurationManager.ConnectionStrings["MicrosoftToDoEnhanced"].ConnectionString;
-
             try
             {
-                await using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                using (var existsCommand = new SqlCommand("SELECT dbo.UserExists(@UserName)", connection))
+                if (await UserRepository.UserExistsAsync(userName))
                 {
-                    existsCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
-                    if (Convert.ToBoolean(await existsCommand.ExecuteScalarAsync()))
-                    {
-                        ShowUserNameError("This username is already taken");
-                        CreateAccountB.IsEnabled = true;
-                        return;
-                    }
+                    ShowUserNameError("This username is already taken");
+                    CreateAccountB.IsEnabled = true;
+                    return;
                 }
 
-                using (var addUserCommand = new SqlCommand("AddUser", connection) { CommandType = CommandType.StoredProcedure })
-                {
-                    addUserCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
-                    addUserCommand.Parameters.Add("@ShowName", SqlDbType.NVarChar, 100).Value = showName;
-                    addUserCommand.Parameters.Add("@UserEmail", SqlDbType.VarChar, 255).Value = string.IsNullOrEmpty(email) ? DBNull.Value : email;
-                    addUserCommand.Parameters.Add("@PasswordHash", SqlDbType.VarChar, 255).Value = HashPassword(password);
-                    addUserCommand.Parameters.Add("@PermissionID", SqlDbType.Int).Value = 1;
-                    addUserCommand.Parameters.Add("@Color", SqlDbType.VarChar, 16).Value = _selectedAccentHex;
-                    await addUserCommand.ExecuteNonQueryAsync();
-                }
+                await UserRepository.AddUserAsync(
+                    userName,
+                    showName,
+                    string.IsNullOrEmpty(email) ? null : email,
+                    HashPassword(password),
+                    1,
+                    _selectedAccentHex);
 
                 UserNameTextBox.Clear();
                 RegisterPasswordBox.Clear();
@@ -168,16 +154,9 @@ public partial class LoginView : Window
             return;
         }
 
-        var connectionString = ConfigurationManager.ConnectionStrings["MicrosoftToDoEnhanced"].ConnectionString;
-        
         try
         {
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync();
-            var storedHashCommand = new SqlCommand("SELECT GetUserPasswordHash(@UserName)", connection);
-            storedHashCommand.Parameters.Add("@UserName", SqlDbType.NVarChar, 100).Value = userName;
-            var storedHash = await storedHashCommand.ExecuteScalarAsync() as string;
-
+            var storedHash = await UserRepository.GetUserPasswordHashAsync(userName);
             var enteredHash = HashPassword(LoginPasswordBox.Password);
 
             if (string.IsNullOrEmpty(storedHash) || !string.Equals(storedHash, enteredHash, StringComparison.Ordinal))
@@ -188,7 +167,16 @@ public partial class LoginView : Window
                 return;
             }
 
-            new global::MicrosoftToDoEnhanced.MainWindow().Show();
+            var user = await UserRepository.GetUserByUserNameAsync(userName);
+            if (user is null)
+            {
+                SignInErrorText.Text = "Incorrect username or password";
+                SignInErrorText.Visibility = Visibility.Visible;
+                SIB.IsEnabled = true;
+                return;
+            }
+
+            new global::MicrosoftToDoEnhanced.MainWindow(user).Show();
             Close();
         }
         catch (Exception)

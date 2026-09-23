@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using MicrosoftToDoEnhanced.Themes;
+using MicrosoftToDoEnhanced.ViewModels;
 
 namespace MicrosoftToDoEnhanced
 {
@@ -19,17 +20,51 @@ namespace MicrosoftToDoEnhanced
             InitializeComponent();
         }
 
+        public MainWindow(User user)
+        {
+            InitializeComponent();
+
+            var viewModel = new MainViewModel(user, this);
+            viewModel.ToastRequested += (_, message) => ShowToast(message);
+            viewModel.SignOutRequested += (_, _) =>
+            {
+                DataContext = null;
+                var login = new Views.LoginView();
+                login.Show();
+                Close();
+            };
+            DataContext = viewModel;
+
+            _ = InitializeViewModelAsync(viewModel);
+        }
+
+        private static async System.Threading.Tasks.Task InitializeViewModelAsync(MainViewModel viewModel)
+        {
+            try
+            {
+                await viewModel.InitializeAsync();
+            }
+            catch (Exception)
+            {
+                // Errors are surfaced to the user by the view-model's own handling.
+            }
+        }
+
         private void OnThemeToggled(object sender, RoutedEventArgs e)
         {
             if (sender is ToggleButton toggle)
                 ThemeManager.ApplyTheme(toggle.IsChecked == true ? AppTheme.Dark : AppTheme.Light);
         }
 
-        // Fired by TaskItem after a drag-drop. Ranking persistence belongs to the VM;
-        // wire this to a ReorderTasksCommand when the VM layer is added.
+        // Fired by TaskItem after a drag-drop. Ranking persistence lives in the VM.
         private void OnTaskReorderRequested(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            ShowToast("Order updated");
+            if (DataContext is not MainViewModel viewModel)
+                return;
+            if (e.OldValue is not TodoTaskViewModel dragged || e.NewValue is not TodoTaskViewModel target)
+                return;
+
+            viewModel.ReorderTasksCommand.Execute(new ReorderPayload(dragged, target));
         }
 
         /// <summary>Lightweight toast helper (UI concern).</summary>
