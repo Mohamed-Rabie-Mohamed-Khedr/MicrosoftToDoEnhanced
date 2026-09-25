@@ -1,18 +1,23 @@
+using Core.Repositories;
+
 namespace MicrosoftToDoEnhanced.ViewModels;
 
 public class PostItemViewModel
 {
-    public PostItemViewModel(PostInGroup post, string authorName, string authorColor)
+    public PostItemViewModel(PostFeedItem feedItem)
     {
-        Post = post;
-        AuthorName = authorName;
-        AuthorColor = authorColor;
+        FeedItem = feedItem;
     }
 
-    public PostInGroup Post { get; }
+    public PostFeedItem FeedItem { get; }
 
-    public string AuthorName { get; }
-    public string AuthorColor { get; }
-    public DateTime PostDate => Post.PostDate;
-    public string PostContent => Post.PostContent;
+    public int PostID => FeedItem.PostID;
+    public int UserID => FeedItem.UserID;
+    public string AuthorName => FeedItem.ShowName;
+    public string AuthorColor => FeedItem.UserColor;
+    public DateTime PostDate => FeedItem.PostDate;
+    public string PostContent => FeedItem.PostContent;
+    public int LikeCount => FeedItem.LikeCount;
+    public bool LikedByMe => FeedItem.LikedByMe;
+    public bool IsMine => FeedItem.IsMine;
 }

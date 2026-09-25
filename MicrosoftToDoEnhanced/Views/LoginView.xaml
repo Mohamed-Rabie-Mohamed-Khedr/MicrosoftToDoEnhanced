@@ -12,9 +12,6 @@
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
 
-    <!-- Placeholder bindings: IsRegisterMode, LoginPassword, RegisterDisplayName,
-         RegisterEmail, RegisterPassword, ToggleModeCommand, IsBusy, ErrorMessage.
-         Sign-in and registration are handled in code-behind (SignIn_Click, CreateAccount_Click). -->
     <Grid>
         <!-- Decorative gradient blobs (Fluent accent) -->
         <Ellipse Width="420" Height="420" HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -61,98 +58,185 @@
             <Border Style="{StaticResource CardStyle}" Grid.Column="1" Padding="28" Effect="{StaticResource PopupShadow}">
                 <Grid>
                     <!-- ============ SIGN IN ============ -->
-                    <StackPanel x:Name="LoginSP">
+                    <StackPanel x:Name="LoginSP"
+                                Visibility="{Binding IsRegisterMode, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                         <TextBlock Text="Welcome back" Style="{StaticResource PageTitleTextStyle}" FontSize="22"/>
                         <TextBlock Text="Sign in to continue to your tasks" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,20"/>
 
                         <TextBlock Text="User name" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4"/>
-                        <TextBox x:Name="SignInUserNameTextBox" Style="{StaticResource ModernTextBoxStyle}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBox x:Name="SignInUserNameTextBox" Style="{StaticResource ModernTextBoxStyle}"
+                                 Text="{Binding LoginUserName, UpdateSourceTrigger=PropertyChanged}"
+                                 BorderThickness="2,2,2,2" FontWeight="Bold"/>
                         <TextBlock x:Name="SignInUserNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Text="{Binding LoginUserNameError}"
+                                   Visibility="{Binding LoginUserNameError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
                         <TextBlock Text="Password" Style="{StaticResource CaptionTextStyle}" Margin="0,14,0,4"/>
                         <PasswordBox x:Name="LoginPasswordBox" Style="{StaticResource ModernPasswordBoxStyle}"
                                  PasswordChanged="OnLoginPasswordChanged" BorderThickness="2,2,2,2" FontWeight="Bold"/>
 
                         <TextBlock x:Name="SignInErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,10,0,0"
-                               Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                               Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                               Text="{Binding LoginError}"
+                               Visibility="{Binding LoginError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
+
+                        <TextBlock x:Name="SignInInfoText" Style="{StaticResource CaptionTextStyle}" Margin="0,10,0,0"
+                               Foreground="{DynamicResource StatusCompletedBrush}" TextWrapping="Wrap"
+                               Text="{Binding LoginInfoMessage}"
+                               Visibility="{Binding LoginInfoMessage, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
                         <Button x:Name="SIB" Style="{StaticResource PrimaryButtonStyle}" Content="Sign in" Margin="0,18,0,0"
-                            Click="SignIn_Click"/>
+                            Command="{Binding SignInCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="New here?"/>
-                            <Button x:Name="CreateAnAccountB" Style="{StaticResource LinkButtonStyle}" Content="Create an account" Click="CreateAnAccountB_Click"/>
+                            <Button x:Name="CreateAnAccountB" Style="{StaticResource LinkButtonStyle}" Content="Create an account"
+                                    Command="{Binding ToggleModeCommand}"/>
                         </StackPanel>
                     </StackPanel>
 
                     <!-- ============ REGISTER ============ -->
-                    <StackPanel x:Name="CreateAnAccountSP" d:IsHidden="True" Visibility="Hidden">
+                    <StackPanel x:Name="CreateAnAccountSP"
+                                Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock Text="Create account" Style="{StaticResource PageTitleTextStyle}" FontSize="22"/>
                         <TextBlock Text="Pick a name, email and your accent color" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,20"/>
 
                         <TextBlock Text="Display name" Style="{StaticResource CaptionTextStyle}" Margin="0,0,0,4"/>
-                        <TextBox x:Name="RegisterDisplayNameTextBox" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterDisplayName, UpdateSourceTrigger=PropertyChanged}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
+                        <TextBox x:Name="RegisterDisplayNameTextBox" Style="{StaticResource ModernTextBoxStyle}"
+                                 Text="{Binding RegisterDisplayName, UpdateSourceTrigger=PropertyChanged}" BorderThickness="2,2,2,2" FontWeight="Bold"/>
                         <TextBlock x:Name="DisplayNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Text="{Binding RegisterDisplayNameError}"
+                                   Visibility="{Binding RegisterDisplayNameError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
                         <TextBlock Text="User name" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
-                        <TextBox x:Name="UserNameTextBox" Style="{StaticResource ModernTextBoxStyle}" FontWeight="Bold" BorderThickness="2,2,2,2"/>
+                        <TextBox x:Name="UserNameTextBox" Style="{StaticResource ModernTextBoxStyle}"
+                                 Text="{Binding RegisterUserName, UpdateSourceTrigger=PropertyChanged}"
+                                 FontWeight="Bold" BorderThickness="2,2,2,2"/>
                         <TextBlock x:Name="UserNameErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Text="{Binding RegisterUserNameError}"
+                                   Visibility="{Binding RegisterUserNameError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
-                        <TextBlock Text="Email" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
-                        <TextBox x:Name="RegisterEmailTextBox" Style="{StaticResource ModernTextBoxStyle}" Text="{Binding RegisterEmail, UpdateSourceTrigger=PropertyChanged}" FontWeight="Black" BorderThickness="2,2,2,2"/>
+                        <TextBlock Text="Email (optional)" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
+                        <TextBox x:Name="RegisterEmailTextBox" Style="{StaticResource ModernTextBoxStyle}"
+                                 Text="{Binding RegisterEmail, UpdateSourceTrigger=PropertyChanged}" FontWeight="Black" BorderThickness="2,2,2,2"/>
                         <TextBlock x:Name="EmailErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Text="{Binding RegisterEmailError}"
+                                   Visibility="{Binding RegisterEmailError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
                         <TextBlock Text="Password" Style="{StaticResource CaptionTextStyle}" Margin="0,12,0,4"/>
                         <PasswordBox x:Name="RegisterPasswordBox" Style="{StaticResource ModernPasswordBoxStyle}"
                                  PasswordChanged="OnRegisterPasswordChanged" FontWeight="Black" BorderThickness="2,2,2,2"/>
                         <TextBlock x:Name="PasswordErrorText" Style="{StaticResource CaptionTextStyle}" Margin="0,4,0,0"
-                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                   Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
+                                   Text="{Binding RegisterPasswordError}"
+                                   Visibility="{Binding RegisterPasswordError, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
                         <TextBlock Text="Your accent color" Style="{StaticResource CaptionTextStyle}" Margin="0,14,0,6"/>
                         <StackPanel x:Name="AccentSwatchRow" Orientation="Horizontal">
                             <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
                                     Background="Transparent" BorderThickness="3"
-                                    BorderBrush="{DynamicResource TextPrimaryBrush}"
                                     Tag="#0078D4" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#0078D4">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#0078D4" IsHitTestVisible="False"/>
                             </Border>
                             <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
-                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Background="Transparent" BorderThickness="3"
                                     Tag="#5C2D91" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#5C2D91">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#5C2D91" IsHitTestVisible="False"/>
                             </Border>
                             <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
-                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Background="Transparent" BorderThickness="3"
                                     Tag="#D83B01" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#D83B01">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#D83B01" IsHitTestVisible="False"/>
                             </Border>
                             <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
-                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Background="Transparent" BorderThickness="3"
                                     Tag="#107C10" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#107C10">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#107C10" IsHitTestVisible="False"/>
                             </Border>
                             <Border Width="38" Height="38" CornerRadius="19" Margin="0,0,6,0"
-                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Background="Transparent" BorderThickness="3"
                                     Tag="#C239B3" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#C239B3">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#C239B3" IsHitTestVisible="False"/>
                             </Border>
                             <Border Width="38" Height="38" CornerRadius="19"
-                                    Background="Transparent" BorderThickness="3" BorderBrush="Transparent"
+                                    Background="Transparent" BorderThickness="3"
                                     Tag="#008575" Cursor="Hand" MouseUp="AccentSwatch_MouseUp">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedAccentHex}" Value="#008575">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Ellipse Width="28" Height="28" Fill="#008575" IsHitTestVisible="False"/>
                             </Border>
                         </StackPanel>
 
                         <Button x:Name="CreateAccountB" Style="{StaticResource PrimaryButtonStyle}" Content="Create account" Margin="0,18,0,0"
-                            Click="CreateAccountB_Click"/>
+                            Command="{Binding RegisterCommand}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Already have an account?"/>
                             <Button x:Name="SignInB" Style="{StaticResource LinkButtonStyle}" Content="Sign in"
-                                Command="{Binding ToggleModeCommand}" Click="SignInB_Click"/>
+                                Command="{Binding ToggleModeCommand}"/>
                         </StackPanel>
                     </StackPanel>
                 </Grid>

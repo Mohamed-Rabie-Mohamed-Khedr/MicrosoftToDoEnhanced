@@ -13,29 +13,27 @@ public enum PlannedScope
     Yearly
 }
 
-public enum PlannedSort
-{
-    Ranking,
-    Date,
-    Importance
-}
-
 public static class PlannedTaskRepository
 {
-    public static async Task AddAsync(int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId)
+    /// <summary>Creates a planned entry (tasks without a plan are not returned by the smart views).</summary>
+    public static async Task<int> AddAsync(
+        int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId, int actingUserId)
     {
-        await SqlHelper.ExecuteAsync("AddPlanned", true,
+        var plannedId = await SqlHelper.ExecuteProcReturnAsync("AddPlanned",
             new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
             new SqlParameter("@PlannedStartDate", SqlDbType.DateTime2) { Value = startDate },
             new SqlParameter("@PlannedEndDate", SqlDbType.DateTime2)
             {
                 Value = endDate ?? (object)DBNull.Value
             },
-            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId });
+            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        return plannedId ?? throw new InvalidOperationException("The plan could not be saved.");
     }
 
     public static async Task UpdateAsync(
-        int plannedId, int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId)
+        int plannedId, int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("UpdatePlanned", true,
             new SqlParameter("@PlannedID", SqlDbType.Int) { Value = plannedId },
@@ -45,15 +43,18 @@ public static class PlannedTaskRepository
             {
                 Value = endDate ?? (object)DBNull.Value
             },
-            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId });
+            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task DeleteAsync(int plannedId)
+    public static async Task DeleteAsync(int plannedId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeletePlanned", true,
-            new SqlParameter("@PlannedID", SqlDbType.Int) { Value = plannedId });
+            new SqlParameter("@PlannedID", SqlDbType.Int) { Value = plannedId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
+    /// <summary>Rolls every past-due recurring plan forward to its next occurrence.</summary>
     public static async Task AutoUpdateAsync()
     {
         await SqlHelper.ExecuteAsync("AutoUpdatePlanneds", true);
@@ -74,57 +75,41 @@ public static class PlannedTaskRepository
         return rows.Select(r => new RepetitionType(r)).ToList();
     }
 
-    public static async Task<List<PlannedTask>> GetPlannedTasksAsync(int userId, PlannedScope scope, PlannedSort sort)
+    /// <summary>
+    /// Loads the planned smart view for <paramref name="userId"/> as full task rows.
+    /// </summary>
+    public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope, int actingUserId)
     {
-        var procedure = (scope, sort) switch
+        var procedure = scope switch
         {
-            (PlannedScope.All, PlannedSort.Date) => "GetTasksPlannedByDate",
-            (PlannedScope.All, PlannedSort.Importance) => "GetTasksPlannedByImportance",
-            (PlannedScope.All, _) => "GetTasksPlannedByRanking",
-            (PlannedScope.Daily, PlannedSort.Importance) => "GetTasksDailyByImportance",
-            (PlannedScope.Daily, _) => "GetTasksDailyByRanking",
-            (PlannedScope.Weekly, PlannedSort.Importance) => "GetTasksWeeklyByImportance",
-            (PlannedScope.Weekly, _) => "GetTasksWeeklyByRanking",
-            (PlannedScope.Monthly, PlannedSort.Importance) => "GetTasksMonthlyByImportance",
-            (PlannedScope.Monthly, _) => "GetTasksMonthlyByRanking",
-            (PlannedScope.Yearly, PlannedSort.Importance) => "GetTasksYearlyByImportance",
-            (PlannedScope.Yearly, _) => "GetTasksYearlyByRanking"
+            PlannedScope.Daily => "GetTasksToday",
+            PlannedScope.Weekly => "GetTasksWeekly",
+            PlannedScope.Monthly => "GetTasksMonthly",
+            PlannedScope.Yearly => "GetTasksYearly",
+            _ => "GetTasksPlannedByDate"
         };
 
         var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
-        return rows.Select(r => new PlannedTask(r)).ToList();
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        return rows.Select(r => new TodoTask(r)).ToList();
     }
 
     /// <summary>
-    /// Counts visible (non-completed) planned tasks for a smart-view badge,
-    /// mirroring the same date/recurrence conditions the corresponding procedures use.
+    /// Counts visible (non-completed) planned tasks for a smart-view badge. Delegates to
+    /// GetTaskCounts so the counts always match the exact date-window/recurrence rules the
+    /// corresponding GetTasks* procedures use (the SQL is the single source of truth).
     /// </summary>
-    public static async Task<int> CountPlannedTasksAsync(int userId, PlannedScope scope)
+    public static async Task<int> CountPlannedTasksAsync(int userId, PlannedScope scope, int actingUserId)
     {
-        var sql = """
-                  SELECT COUNT(*) FROM Planned P
-                  JOIN Tasks T ON P.TaskID = T.TaskID
-                  WHERE T.UserID = @UserID AND T.TaskParentID IS NULL AND T.TaskStatusID <> 3
-                  """;
-        switch (scope)
+        var counts = await TaskRepository.GetTaskCountsAsync(userId, actingUserId);
+        return scope switch
         {
-            case PlannedScope.Daily:
-                sql += " AND CAST(P.PlannedStartDate AS DATE) BETWEEN CAST(GETDATE() AS DATE) AND CAST(ISNULL(P.PlannedEndDate, GETDATE()) AS DATE)";
-                break;
-            case PlannedScope.Weekly:
-                sql += " AND P.RepetitionTypeID = 3";
-                break;
-            case PlannedScope.Monthly:
-                sql += " AND P.RepetitionTypeID = 4";
-                break;
-            case PlannedScope.Yearly:
-                sql += " AND P.RepetitionTypeID = 5";
-                break;
-        }
-
-        var result = await SqlHelper.ScalarAsync(sql,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
-        return Convert.ToInt32(result);
+            PlannedScope.Daily => counts.TodayCount,
+            PlannedScope.Weekly => counts.WeeklyCount,
+            PlannedScope.Monthly => counts.MonthlyCount,
+            PlannedScope.Yearly => counts.YearlyCount,
+            _ => counts.PlannedCount
+        };
     }
 }

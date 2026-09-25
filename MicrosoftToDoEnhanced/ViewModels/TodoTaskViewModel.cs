@@ -63,6 +63,7 @@ public class TodoTaskViewModel : ViewModelBase
     public int TaskID => _model.TaskID;
     public int? TaskParentID => _model.TaskParentID;
     public DateTime CreationDate => _model.CreationDate;
+    public int Ranking => _model.Ranking;
 
     public string TaskName
     {
@@ -83,11 +84,7 @@ public class TodoTaskViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _description, value))
-            {
-#pragma warning disable CS8601
                 _model.Description = value;
-#pragma warning restore CS8601
-            }
         }
     }
 
@@ -102,12 +99,12 @@ public class TodoTaskViewModel : ViewModelBase
 
     public bool IsCompleted
     {
-        get => _model.TaskStatusID == 3;
+        get => _model.TaskStatusID == (int)TaskState.Completed;
         set
         {
             if (IsCompleted == value)
                 return;
-            _model.TaskStatusID = value ? 3 : 2;
+            _model.TaskStatusID = value ? (int)TaskState.Completed : (int)TaskState.Incomplete;
             OnPropertyChanged();
             OnPropertyChanged(nameof(StatusName));
         }
@@ -139,20 +136,20 @@ public class TodoTaskViewModel : ViewModelBase
 
     public bool IsLow
     {
-        get => LevelOfImportanceId == 1;
-        set { if (value) LevelOfImportanceId = 1; }
+        get => LevelOfImportanceId == (int)TaskImportance.Low;
+        set { if (value) LevelOfImportanceId = (int)TaskImportance.Low; }
     }
 
     public bool IsMedium
     {
-        get => LevelOfImportanceId == 2;
-        set { if (value) LevelOfImportanceId = 2; }
+        get => LevelOfImportanceId == (int)TaskImportance.Medium;
+        set { if (value) LevelOfImportanceId = (int)TaskImportance.Medium; }
     }
 
     public bool IsHigh
     {
-        get => LevelOfImportanceId == 3;
-        set { if (value) LevelOfImportanceId = 3; }
+        get => LevelOfImportanceId == (int)TaskImportance.High;
+        set { if (value) LevelOfImportanceId = (int)TaskImportance.High; }
     }
 
     public ObservableCollection<TodoTaskViewModel> Steps { get; } = new();
@@ -165,7 +162,13 @@ public class TodoTaskViewModel : ViewModelBase
 
     public ObservableCollection<Attachment> Attachments { get; } = new();
 
-    public bool HasAttachments => Attachments.Count > 0;
+    private bool _hasAttachments;
+
+    public bool HasAttachments
+    {
+        get => _hasAttachments || Attachments.Count > 0;
+        private set => SetProperty(ref _hasAttachments, value);
+    }
 
     public DateTime? DueDate
     {
@@ -259,9 +262,45 @@ public class TodoTaskViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Applies the row-level aggregates returned by GetTaskListExtras (substeps, attachment
+    /// presence, due dates, recurrence, assignee) so list rows render fully without opening
+    /// the detail panel. Details are loaded lazily when the task becomes the SelectedTask.
+    /// </summary>
+    public void ApplyListExtras(TaskListExtras extras)
+    {
+        StepsSummary = extras.SubtaskCount > 0
+            ? $"{extras.SubtaskCompletedCount}/{extras.SubtaskCount}"
+            : null;
+
+        HasAttachments = extras.HasAttachments;
+
+        if (extras.DueStartDate is DateTime dueDate)
+            DueDate = dueDate;
+        EndDate = extras.DueEndDate;
+
+        if (extras.RepetitionTypeID is int repetitionTypeId)
+        {
+            SelectedRecurrence =
+                _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == repetitionTypeId);
+        }
+
+        if (extras.AssignedToUserID is int assignedUserId && extras.AssignedToName is not null)
+        {
+            _assignedToUserId = assignedUserId;
+            SelectedAssignee = Assignees.FirstOrDefault(u => u.UserID == assignedUserId)
+                ?? new User
+                {
+                    UserID = assignedUserId,
+                    ShowName = extras.AssignedToName,
+                    Color = extras.AssignedToColor ?? string.Empty
+                };
+        }
+    }
+
     private async Task ReloadStepsAsync()
     {
-        var children = await TaskRepository.GetChildTasksAsync(TaskID);
+        var children = await TaskRepository.GetChildTasksAsync(TaskID, _owner.CurrentUserId);
 
         Steps.Clear();
         foreach (var child in children)
@@ -272,7 +311,7 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task ReloadAttachmentsAsync()
     {
-        var attachments = await AttachmentRepository.GetAttachmentsAsync(TaskID);
+        var attachments = await AttachmentRepository.GetAttachmentInfosAsync(new[] { TaskID });
 
         Attachments.Clear();
         foreach (var attachment in attachments)
@@ -310,13 +349,14 @@ public class TodoTaskViewModel : ViewModelBase
 
         await TaskRepository.AddTaskAsync(
             TaskID,
-            2,
+            (int)TaskState.Incomplete,
             _owner.CurrentUserId,
             _model.GroupID,
             NewStepTitle.Trim(),
             _model.LevelOfImportanceID,
             null,
-            _model.Color ?? "#FFFFFF");
+            _model.Color ?? "#FFFFFF",
+            _owner.CurrentUserId);
 
         NewStepTitle = string.Empty;
         await ReloadStepsAsync();
@@ -329,7 +369,10 @@ public class TodoTaskViewModel : ViewModelBase
         if (step is null)
             return;
 
-        await TaskRepository.UpdateTaskStatusAsync(step.TaskID, step.IsCompleted ? 3 : 2);
+        await TaskRepository.UpdateTaskStatusAsync(
+            step.TaskID,
+            step.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete,
+            _owner.CurrentUserId);
         UpdateStepsSummary();
         _owner.RaiseToast(step.IsCompleted ? "Step completed" : "Step marked incomplete");
         await _owner.RefreshCountsOnlyAsync();
@@ -340,7 +383,7 @@ public class TodoTaskViewModel : ViewModelBase
         if (step is null)
             return;
 
-        await TaskRepository.DeleteTaskAsync(step.TaskID);
+        await TaskRepository.DeleteTaskAsync(step.TaskID, _owner.CurrentUserId);
         Steps.Remove(step);
         UpdateStepsSummary();
         _owner.RaiseToast("Step removed");
@@ -357,7 +400,7 @@ public class TodoTaskViewModel : ViewModelBase
         var fileSizeKB = (int)Math.Ceiling(fileBytes.Length / 1024d);
 
         await AttachmentRepository.AddAttachmentAsync(
-            TaskID, Path.GetFileName(dialog.FileName), fileBytes, fileSizeKB);
+            TaskID, Path.GetFileName(dialog.FileName), fileBytes, fileSizeKB, _owner.CurrentUserId);
 
         await ReloadAttachmentsAsync();
         _owner.RaiseToast("Attachment added");
@@ -368,7 +411,7 @@ public class TodoTaskViewModel : ViewModelBase
         if (attachment is null)
             return;
 
-        await AttachmentRepository.DeleteAttachmentAsync(attachment.AttachmentID);
+        await AttachmentRepository.DeleteAttachmentAsync(attachment.AttachmentID, _owner.CurrentUserId);
         Attachments.Remove(attachment);
         OnPropertyChanged(nameof(HasAttachments));
         _owner.RaiseToast("Attachment removed");
@@ -376,14 +419,18 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task DeleteAsync()
     {
-        await TaskRepository.DeleteTaskAsync(TaskID);
+        await TaskRepository.DeleteTaskAsync(TaskID, _owner.CurrentUserId);
         _owner.RaiseToast("Task deleted");
         await _owner.RefreshAfterMutationAsync();
     }
 
     private async Task SaveAsync()
     {
-        await TaskRepository.UpdateTaskAsync(
+        var assigneeIds = SelectedAssignee is null
+            ? Array.Empty<int>()
+            : new[] { SelectedAssignee.UserID };
+
+        await TaskRepository.SaveTaskAsync(
             TaskID,
             _model.TaskParentID,
             _model.TaskStatusID,
@@ -392,48 +439,12 @@ public class TodoTaskViewModel : ViewModelBase
             TaskName,
             LevelOfImportanceId,
             Description,
-            _model.Color ?? "#FFFFFF");
-
-        var hasDate = DueDate.HasValue;
-        if (hasDate)
-        {
-            var repetitionTypeId = SelectedRecurrence?.Type.RepetitionTypeID ?? 1;
-            if (_planned is null)
-            {
-                await PlannedTaskRepository.AddAsync(TaskID, DueDate!.Value, EndDate, repetitionTypeId);
-            }
-            else
-            {
-                await PlannedTaskRepository.UpdateAsync(
-                    _planned.PlannedID, TaskID, DueDate!.Value, EndDate, repetitionTypeId);
-            }
-        }
-        else if (_planned is not null)
-        {
-            await PlannedTaskRepository.DeleteAsync(_planned.PlannedID);
-            _planned = null;
-            SelectedRecurrence = null;
-        }
-
-        var selectedUserId = SelectedAssignee?.UserID;
-        if (selectedUserId != _assignedToUserId)
-        {
-            if (_assignedId is int assignedId)
-            {
-                await AssignedTaskRepository.DeleteAsync(assignedId);
-                _assignedId = null;
-            }
-
-            if (selectedUserId is int targetUserId)
-            {
-                await AssignedTaskRepository.AddAsync(TaskID, targetUserId);
-                _assignedToUserId = targetUserId;
-            }
-            else
-            {
-                _assignedToUserId = null;
-            }
-        }
+            _model.Color ?? "#FFFFFF",
+            DueDate,
+            EndDate,
+            SelectedRecurrence?.Type.RepetitionTypeID ?? 1,
+            assigneeIds,
+            _owner.CurrentUserId);
 
         _owner.RaiseToast("Task saved");
         await _owner.RefreshAfterMutationAsync();

@@ -6,19 +6,24 @@ namespace Core.Repositories;
 
 public static class AssignedTaskRepository
 {
-    public static async Task AddAsync(int taskId, int toUserId)
+    public static async Task AddAsync(int taskId, int toUserId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("AddAssignTask", true,
             new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@ToUserID", SqlDbType.Int) { Value = toUserId });
+            new SqlParameter("@ToUserID", SqlDbType.Int) { Value = toUserId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task DeleteAsync(int assignedId)
+    public static async Task DeleteAsync(int assignedId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeleteAssignedTask", true,
-            new SqlParameter("@AssignedID", SqlDbType.Int) { Value = assignedId });
+            new SqlParameter("@AssignedID", SqlDbType.Int) { Value = assignedId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
+    /// <summary>
+    /// All assignments on a task (the detail panel lists them all).
+    /// </summary>
     public static async Task<List<AssignedTask>> GetByTaskAsync(int taskId)
     {
         var rows = await SqlHelper.QueryAsync(
@@ -27,12 +32,17 @@ public static class AssignedTaskRepository
         return rows.Select(r => new AssignedTask(r)).ToList();
     }
 
-    public static async Task<List<AssignedTask>> GetForUserAsync(int userId, bool byImportance)
+    /// <summary>
+    /// The "Assigned to me" smart view: top-level, non-completed tasks assigned to
+    /// <paramref name="userId"/>, returned as full task rows.
+    /// </summary>
+    public static async Task<List<TodoTask>> GetAssignedTasksAsync(int userId, bool byImportance, int actingUserId)
     {
         var procedure = byImportance ? "GetAssignedTasksByImportance" : "GetAssignedTasksByRanking";
         var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
-        return rows.Select(r => new AssignedTask(r)).ToList();
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        return rows.Select(r => new TodoTask(r)).ToList();
     }
 
     /// <summary>

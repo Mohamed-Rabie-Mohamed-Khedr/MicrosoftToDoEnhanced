@@ -1,200 +1,360 @@
-using System;
+using System.ComponentModel;
 using System.Net.Mail;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Core.Repositories;
+using MicrosoftToDoEnhanced.Services;
 using MicrosoftToDoEnhanced.Themes;
+using MicrosoftToDoEnhanced.ViewModels;
 
 namespace MicrosoftToDoEnhanced.Views;
 
+/// <summary>
+/// Sign-in / registration window. All validation, hashing and repository work lives in
+/// <see cref="LoginViewModel"/>. Code-behind only carries UI plumbing: it attaches the
+/// view-model, pushes PasswordBox contents into it with a typed cast (WPF PasswordBoxes
+/// cannot bind), forwards the accent swatch gesture to the view-model, reacts to the
+/// selected accent (theme preview) and navigates to MainWindow after a successful sign-in.
+/// </summary>
 public partial class LoginView : Window
 {
-    private string _selectedAccentHex = "#0078D4";
-
     public LoginView()
     {
         InitializeComponent();
+        DataContext = new LoginViewModel(OpenMainWindow);
+        if (DataContext is LoginViewModel viewModel)
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
-    private void OnLoginPasswordChanged(object sender, RoutedEventArgs e) =>
-        SetViewModelPassword("LoginPassword", ((PasswordBox)sender).Password);
-
-    private void OnRegisterPasswordChanged(object sender, RoutedEventArgs e) =>
-        SetViewModelPassword("RegisterPassword", ((PasswordBox)sender).Password);
-
-    private void SetViewModelPassword(string propertyName, string value)
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        var property = DataContext?.GetType().GetProperty(propertyName);
-        property?.SetValue(DataContext, value);
+        if (e.PropertyName == nameof(LoginViewModel.SelectedAccentHex)
+            && sender is LoginViewModel viewModel)
+            ThemeManager.ApplyAccentColor(viewModel.SelectedAccentHex);
+
+        // When the VM clears the credential after a sign-in attempt, wipe the PasswordBox
+        // too so the raw password never lingers in tree (PasswordBoxes cannot bind).
+        if (e.PropertyName == nameof(LoginViewModel.LoginPassword)
+            && sender is LoginViewModel loginViewModel
+            && loginViewModel.LoginPassword is null)
+            LoginPasswordBox.Password = string.Empty;
     }
 
-    private void CreateAnAccountB_Click(object sender, RoutedEventArgs e)
+    private void OnLoginPasswordChanged(object sender, RoutedEventArgs e)
     {
-        LoginSP.Visibility = Visibility.Collapsed;
-        CreateAnAccountSP.Visibility = Visibility.Visible;
+        if (DataContext is LoginViewModel viewModel && sender is PasswordBox box)
+            viewModel.LoginPassword = box.Password;
     }
 
-    private void SignInB_Click(object sender, RoutedEventArgs e)
+    private void OnRegisterPasswordChanged(object sender, RoutedEventArgs e)
     {
-        LoginSP.Visibility = Visibility.Visible;
-        CreateAnAccountSP.Visibility = Visibility.Collapsed;
+        if (DataContext is LoginViewModel viewModel && sender is PasswordBox box)
+            viewModel.RegisterPassword = box.Password;
     }
 
     private void AccentSwatch_MouseUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Border ring || ring.Tag is not string hex)
             return;
-
-        if (ring.Parent is Panel row)
-        {
-            foreach (var child in row.Children)
-            {
-                if (child is Border other)
-                    other.BorderBrush = Brushes.Transparent;
-            }
-        }
-
-        ring.SetResourceReference(Border.BorderBrushProperty, "TextPrimaryBrush");
-        _selectedAccentHex = hex;
-        ThemeManager.ApplyAccentColor(hex);
+        if (DataContext is LoginViewModel viewModel)
+            viewModel.SelectedAccentHex = hex;
     }
 
-    private async void CreateAccountB_Click(object sender, RoutedEventArgs e)
+    private void OpenMainWindow(User user)
     {
-        CreateAccountB.IsEnabled = false;
-        UserNameErrorText.Visibility = Visibility.Collapsed;
-        DisplayNameErrorText.Visibility = Visibility.Collapsed;
-        EmailErrorText.Visibility = Visibility.Collapsed;
-        PasswordErrorText.Visibility = Visibility.Collapsed;
+        new global::MicrosoftToDoEnhanced.MainWindow(user).Show();
+        Close();
+    }
+}
 
-        var userName = UserNameTextBox.Text.Trim();
-        var showName = RegisterDisplayNameTextBox.Text.Trim();
-        var email = RegisterEmailTextBox.Text.Trim();
-        var password = RegisterPasswordBox.Password;
+/// <summary>
+/// Sign-in / registration view-model for LoginView. All validation and authentication work
+/// goes through <see cref="UserRepository.SignInAsync"/> and
+/// <see cref="UserRepository.RegisterAsync"/>; the view pushes PasswordBox contents in
+/// because WPF PasswordBoxes cannot bind.
+/// </summary>
+public sealed class LoginViewModel : ViewModelBase
+{
+    private readonly Action<User> _onAuthenticated;
 
-        var valid = true;
+    private string _loginUserName = string.Empty;
+    private string? _loginPassword;
+    private string? _registerUserName;
+    private string? _registerDisplayName;
+    private string? _registerEmail;
+    private string? _registerPassword;
+    private string _selectedAccentHex = "#0078D4";
+    private bool _isRegisterMode;
+    private bool _isBusy;
 
-        if (string.IsNullOrWhiteSpace(showName))
-        {
-            DisplayNameErrorText.Text = "Display name is required";
-            DisplayNameErrorText.Visibility = Visibility.Visible;
-            valid = false;
-        }
+    private string? _loginError;
+    private string? _loginInfoMessage;
+    private string? _loginUserNameError;
+    private string? _registerDisplayNameError;
+    private string? _registerUserNameError;
+    private string? _registerEmailError;
+    private string? _registerPasswordError;
 
-        if (string.IsNullOrWhiteSpace(userName) || userName.Contains(' '))
-        {
-            ShowUserNameError("User name must not be empty and must not contain spaces");
-            valid = false;
-        }
+    public LoginViewModel(Action<User> onAuthenticated)
+    {
+        _onAuthenticated = onAuthenticated;
 
-        if (string.IsNullOrEmpty(password))
-        {
-            PasswordErrorText.Text = "Password is required";
-            PasswordErrorText.Visibility = Visibility.Visible;
-            valid = false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(email) && !IsValidEmail(email))
-        {
-            EmailErrorText.Text = "Please enter a valid email address";
-            EmailErrorText.Visibility = Visibility.Visible;
-            valid = false;
-        }
-
-        if (valid)
-        {
-            try
-            {
-                if (await UserRepository.UserExistsAsync(userName))
-                {
-                    ShowUserNameError("This username is already taken");
-                    CreateAccountB.IsEnabled = true;
-                    return;
-                }
-
-                await UserRepository.AddUserAsync(
-                    userName,
-                    showName,
-                    string.IsNullOrEmpty(email) ? null : email,
-                    HashPassword(password),
-                    1,
-                    _selectedAccentHex);
-
-                UserNameTextBox.Clear();
-                RegisterPasswordBox.Clear();
-                LoginSP.Visibility = Visibility.Visible;
-                CreateAnAccountSP.Visibility = Visibility.Collapsed;
-            }
-            catch (Exception)
-            {
-                ShowUserNameError("Could not create your account. Check your connection and try again.");
-            }
-        }
-        CreateAccountB.IsEnabled = true;
+        SignInCommand = new AsyncRelayCommand(async () => await SignInAsync());
+        RegisterCommand = new AsyncRelayCommand(async () => await RegisterAsync());
+        ToggleModeCommand = new RelayCommand(ToggleMode);
     }
 
-    private async void SignIn_Click(object sender, RoutedEventArgs e)
+    public ICommand SignInCommand { get; }
+    public ICommand RegisterCommand { get; }
+    public ICommand ToggleModeCommand { get; }
+
+    public string LoginUserName
     {
-        SIB.IsEnabled = false;
-        SignInUserNameErrorText.Visibility = Visibility.Collapsed;
-        SignInErrorText.Visibility = Visibility.Collapsed;
-
-        var userName = SignInUserNameTextBox.Text.Trim();
-
-        if (string.IsNullOrWhiteSpace(userName))
+        get => _loginUserName;
+        set
         {
-            SignInUserNameErrorText.Text = "User name is required";
-            SignInUserNameErrorText.Visibility = Visibility.Visible;
-            SIB.IsEnabled = true;
-            return;
+            if (SetProperty(ref _loginUserName, value))
+                LoginInfoMessage = null;
         }
+    }
 
+    /// <summary>
+    /// Fed from the PasswordBox by the view. Cleared after every sign-in attempt so a
+    /// credential never lingers on the VM (the view clears its PasswordBox copy in the
+    /// same PropertyChanged cycle).
+    /// </summary>
+    public string? LoginPassword
+    {
+        get => _loginPassword;
+        set
+        {
+            if (SetProperty(ref _loginPassword, value))
+            {
+                LoginError = null;
+                LoginUserNameError = null;
+                LoginInfoMessage = null;
+            }
+        }
+    }
+
+    public string? RegisterUserName
+    {
+        get => _registerUserName;
+        set => SetProperty(ref _registerUserName, value);
+    }
+
+    public string? RegisterDisplayName
+    {
+        get => _registerDisplayName;
+        set => SetProperty(ref _registerDisplayName, value);
+    }
+
+    public string? RegisterEmail
+    {
+        get => _registerEmail;
+        set => SetProperty(ref _registerEmail, value);
+    }
+
+    public string? RegisterPassword
+    {
+        get => _registerPassword;
+        set
+        {
+            if (SetProperty(ref _registerPassword, value))
+                RegisterPasswordError = null;
+        }
+    }
+
+    public string SelectedAccentHex
+    {
+        get => _selectedAccentHex;
+        set => SetProperty(ref _selectedAccentHex, value);
+    }
+
+    /// <summary>true shows the register panel, false shows the sign-in panel.</summary>
+    public bool IsRegisterMode
+    {
+        get => _isRegisterMode;
+        set => SetProperty(ref _isRegisterMode, value);
+    }
+
+    /// <summary>True while a sign-in/registration is in flight; keeps the buttons disabled.</summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set => SetProperty(ref _isBusy, value);
+    }
+
+    public string? LoginError
+    {
+        get => _loginError;
+        private set => SetProperty(ref _loginError, value);
+    }
+
+    /// <summary>Neutral/success hint in the sign-in card (e.g. after a fresh registration).</summary>
+    public string? LoginInfoMessage
+    {
+        get => _loginInfoMessage;
+        private set => SetProperty(ref _loginInfoMessage, value);
+    }
+
+    public string? LoginUserNameError
+    {
+        get => _loginUserNameError;
+        private set => SetProperty(ref _loginUserNameError, value);
+    }
+
+    public string? RegisterDisplayNameError
+    {
+        get => _registerDisplayNameError;
+        private set => SetProperty(ref _registerDisplayNameError, value);
+    }
+
+    public string? RegisterUserNameError
+    {
+        get => _registerUserNameError;
+        private set => SetProperty(ref _registerUserNameError, value);
+    }
+
+    public string? RegisterEmailError
+    {
+        get => _registerEmailError;
+        private set => SetProperty(ref _registerEmailError, value);
+    }
+
+    public string? RegisterPasswordError
+    {
+        get => _registerPasswordError;
+        private set => SetProperty(ref _registerPasswordError, value);
+    }
+
+    private void ToggleMode()
+    {
+        IsRegisterMode = !IsRegisterMode;
+        LoginError = null;
+        LoginUserNameError = null;
+        RegisterDisplayNameError = null;
+        RegisterUserNameError = null;
+        RegisterEmailError = null;
+        RegisterPasswordError = null;
+    }
+
+    private async Task SignInAsync()
+    {
+        IsBusy = true;
         try
         {
-            var storedHash = await UserRepository.GetUserPasswordHashAsync(userName);
-            var enteredHash = HashPassword(LoginPasswordBox.Password);
+            LoginInfoMessage = null;
+            LoginError = null;
+            LoginUserNameError = null;
 
-            if (string.IsNullOrEmpty(storedHash) || !string.Equals(storedHash, enteredHash, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(LoginUserName))
             {
-                SignInErrorText.Text = "Incorrect username or password";
-                SignInErrorText.Visibility = Visibility.Visible;
-                SIB.IsEnabled = true;
+                LoginUserNameError = "User name is required";
                 return;
             }
 
-            var user = await UserRepository.GetUserByUserNameAsync(userName);
-            if (user is null)
+            var result = await UserRepository.SignInAsync(LoginUserName, LoginPassword ?? string.Empty);
+
+            // Never retain the credential after an attempt, success or failure. Clearing it
+            // here also triggers the view hook that wipes its PasswordBox copy.
+            LoginPassword = null;
+
+            if (!result.Success)
             {
-                SignInErrorText.Text = "Incorrect username or password";
-                SignInErrorText.Visibility = Visibility.Visible;
-                SIB.IsEnabled = true;
+                LoginError = "Incorrect username or password";
                 return;
             }
 
-            new global::MicrosoftToDoEnhanced.MainWindow(user).Show();
-            Close();
+            _onAuthenticated(result.User!);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            SignInErrorText.Text = "Incorrect username or password";
-            SignInErrorText.Visibility = Visibility.Visible;
-            SIB.IsEnabled = true;
+            AppLogger.LogError("Sign in", exception);
+            LoginPassword = null;
+            LoginError = "Could not sign in. Check the database connection and try again.";
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 
-    private void ShowUserNameError(string message)
+    private async Task RegisterAsync()
     {
-        UserNameErrorText.Text = message;
-        UserNameErrorText.Visibility = Visibility.Visible;
-    }
+        IsBusy = true;
+        try
+        {
+            RegisterDisplayNameError = null;
+            RegisterUserNameError = null;
+            RegisterEmailError = null;
+            RegisterPasswordError = null;
 
-    private static string HashPassword(string password) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(password)));
+            var userName = RegisterUserName?.Trim() ?? string.Empty;
+            var showName = RegisterDisplayName?.Trim() ?? string.Empty;
+            var email = RegisterEmail?.Trim() ?? string.Empty;
+            var password = RegisterPassword ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(showName))
+                RegisterDisplayNameError = "Display name is required";
+            else if (showName.Length > DbLimits.MaxShowNameLength)
+                RegisterDisplayNameError = $"Display name must be {DbLimits.MaxShowNameLength} characters or fewer";
+
+            if (string.IsNullOrEmpty(userName) || userName.Contains(' '))
+                RegisterUserNameError = "User name must not be empty and must not contain spaces";
+            else if (userName.Length > DbLimits.MaxUserNameLength)
+                RegisterUserNameError = $"User name must be {DbLimits.MaxUserNameLength} characters or fewer";
+
+            if (password.Length < DbLimits.MinPasswordLength)
+                RegisterPasswordError = $"Password must be at least {DbLimits.MinPasswordLength} characters";
+            else if (password.Length > DbLimits.MaxPasswordLength)
+                RegisterPasswordError = $"Password must be {DbLimits.MaxPasswordLength} characters or fewer";
+
+            if (!string.IsNullOrEmpty(email))
+            {
+                if (email.Length > DbLimits.MaxEmailLength)
+                    RegisterEmailError = $"Email must be {DbLimits.MaxEmailLength} characters or fewer";
+                else if (!IsValidEmail(email))
+                    RegisterEmailError = "Please enter a valid email address";
+            }
+
+            if (RegisterDisplayNameError is not null
+                || RegisterUserNameError is not null
+                || RegisterEmailError is not null
+                || RegisterPasswordError is not null)
+            {
+                return;
+            }
+
+            var result = await UserRepository.RegisterAsync(
+                userName, showName, string.IsNullOrEmpty(email) ? null : email, password, SelectedAccentHex);
+
+            if (!result.Success)
+            {
+                RegisterUserNameError = result.ErrorMessage;
+                return;
+            }
+
+            RegisterUserName = null;
+            RegisterDisplayName = null;
+            RegisterEmail = null;
+            RegisterPassword = null;
+            LoginUserName = userName;
+            LoginInfoMessage = "Account created — sign in below.";
+            IsRegisterMode = false;
+        }
+        catch (Exception exception)
+        {
+            AppLogger.LogError("Register", exception);
+            RegisterUserNameError = "Could not create your account. Check the database connection and try again.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     private static bool IsValidEmail(string email)
     {

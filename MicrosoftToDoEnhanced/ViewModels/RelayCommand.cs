@@ -60,6 +60,13 @@ public class AsyncRelayCommand : ICommand
         _canExecute = canExecute;
     }
 
+    /// <summary>
+    /// Global hook for exceptions that escape an async command's await. The host
+    /// application wires this once (e.g. to a toast); async void never lets the
+    /// exception reach the dispatcher unchecked.
+    /// </summary>
+    public static Action<Exception>? ErrorHandler { get; set; }
+
     public event EventHandler? CanExecuteChanged
     {
         add => CommandManager.RequerySuggested += value;
@@ -79,6 +86,10 @@ public class AsyncRelayCommand : ICommand
         try
         {
             await _execute();
+        }
+        catch (Exception exception)
+        {
+            ErrorHandler?.Invoke(exception);
         }
         finally
         {
@@ -122,6 +133,10 @@ public class AsyncRelayCommand<T> : ICommand
         try
         {
             await _execute(parameter is T value ? value : default);
+        }
+        catch (Exception exception)
+        {
+            AsyncRelayCommand.ErrorHandler?.Invoke(exception);
         }
         finally
         {

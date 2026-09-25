@@ -4,13 +4,97 @@ using Microsoft.Data.SqlClient;
 
 namespace Core.Repositories;
 
+/// <summary>Per-task aggregates shown on list rows (loaded via GetTaskListExtras).</summary>
+public sealed record TaskListExtras(
+    int TaskID,
+    int SubtaskCount,
+    int SubtaskCompletedCount,
+    bool HasAttachments,
+    int? AssignedToUserID,
+    string? AssignedToName,
+    string? AssignedToColor,
+    DateTime? DueStartDate,
+    DateTime? DueEndDate,
+    int? RepetitionTypeID,
+    string? RepetitionName);
+
+/// <summary>Everything the detail panel needs in one round trip (GetTaskExtras).</summary>
+public sealed record TaskDetailBundle(
+    DataRow Task,
+    List<TodoTask> Steps,
+    List<Attachment> Attachments,
+    List<User> Assignees,
+    bool CanManage,
+    string OwnerName,
+    string OwnerColor);
+
+public sealed record TaskCounts(
+    int AllCount,
+    int TodayCount,
+    int ImportantCount,
+    int PlannedCount,
+    int AssignedCount,
+    int WeeklyCount,
+    int MonthlyCount,
+    int YearlyCount);
+
+/// <summary>
+/// Outcome of UpdateTaskStatus: the effective status after the stored procedure applied its
+/// rules (e.g. a non-manager group member is forced back to Pending), plus the task's planned
+/// dates as of the toggle (already advanced for a completed recurring task).
+/// </summary>
+public sealed record TaskStatusResult(
+    int TaskStatusID,
+    DateTime? PlannedStartDate,
+    DateTime? PlannedEndDate);
+
+/// <summary>All small lookup tables, returned by one GetLookups call.</summary>
+public sealed record LookupBundle(
+    List<TodoTaskStatus> Statuses,
+    List<LevelOfImportance> Levels,
+    List<RepetitionType> RepetitionTypes,
+    List<User> Users);
+
 public static class TaskRepository
 {
-    public static async Task AddTaskAsync(
+    public static async Task<int> AddTaskAsync(
         int? taskParentId, int taskStatusId, int userId, int? groupId,
-        string taskName, int importanceLevelId, string? description, string color)
+        string taskName, int importanceLevelId, string? description, string color, int actingUserId)
     {
-        await SqlHelper.ExecuteAsync("AddTask", true,
+        var taskId = await SqlHelper.ExecuteProcReturnAsync("AddTask",
+            new SqlParameter("@TaskParentID", SqlDbType.Int) { Value = taskParentId ?? (object)DBNull.Value },
+            new SqlParameter("@TaskStatusID", SqlDbType.Int) { Value = taskStatusId },
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId ?? (object)DBNull.Value },
+            new SqlParameter("@TaskName", SqlDbType.NVarChar, 100) { Value = taskName },
+            new SqlParameter("@ImportanceLevelID", SqlDbType.Int) { Value = importanceLevelId },
+            new SqlParameter("@Description", SqlDbType.NVarChar, -1)
+            {
+                Value = description is null ? DBNull.Value : description
+            },
+            new SqlParameter("@Color", SqlDbType.VarChar, 16)
+            {
+                Value = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color
+            },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        return taskId ?? throw new InvalidOperationException("The task could not be added.");
+    }
+
+    /// <summary>
+    /// Inserts or updates a task together with its plan (due dates/repetition) and its
+    /// assignees in a single server transaction. Always returns the TaskID: the procedure
+    /// emits "SELECT @TaskID AS NewID" on both the insert and update paths, so the value
+    /// is never null.
+    /// </summary>
+    public static async Task<int?> SaveTaskAsync(
+        int? taskId, int? taskParentId, int taskStatusId, int userId, int? groupId,
+        string taskName, int importanceLevelId, string? description, string color,
+        DateTime? dueStartDate, DateTime? dueEndDate, int repetitionTypeId,
+        IReadOnlyList<int> assigneeIds, int actingUserId)
+    {
+        return await SqlHelper.ExecuteProcReturnAsync("SaveTask",
+            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId ?? (object)DBNull.Value },
             new SqlParameter("@TaskParentID", SqlDbType.Int)
             {
                 Value = taskParentId ?? (object)DBNull.Value
@@ -29,62 +113,57 @@ public static class TaskRepository
             },
             new SqlParameter("@Color", SqlDbType.VarChar, 16)
             {
-                Value = string.IsNullOrEmpty(color) ? "#FFFFFF" : color
-            });
+                Value = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color
+            },
+            new SqlParameter("@DueStartDate", SqlDbType.DateTime2)
+            {
+                Value = dueStartDate ?? (object)DBNull.Value
+            },
+            new SqlParameter("@DueEndDate", SqlDbType.DateTime2)
+            {
+                Value = dueEndDate ?? (object)DBNull.Value
+            },
+            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId },
+            SqlHelper.Tvp("@Assignees", "TVPUserIDs", SqlHelper.BuildUserIdTable(assigneeIds)),
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task UpdateTaskAsync(
-        int taskId, int? taskParentId, int taskStatusId, int userId, int? groupId,
-        string taskName, int importanceLevelId, string? description, string color)
+    public static async Task<TaskStatusResult> UpdateTaskStatusAsync(int taskId, int taskStatusId, int actingUserId)
     {
-        await SqlHelper.ExecuteAsync("UpdateTask", true,
+        var rows = await SqlHelper.QueryAsync("UpdateTaskStatus", true,
             new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@TaskParentID", SqlDbType.Int)
-            {
-                Value = taskParentId ?? (object)DBNull.Value
-            },
             new SqlParameter("@TaskStatusID", SqlDbType.Int) { Value = taskStatusId },
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@GroupID", SqlDbType.Int)
-            {
-                Value = groupId ?? (object)DBNull.Value
-            },
-            new SqlParameter("@TaskName", SqlDbType.NVarChar, 100) { Value = taskName },
-            new SqlParameter("@ImportanceLevelID", SqlDbType.Int) { Value = importanceLevelId },
-            new SqlParameter("@Description", SqlDbType.NVarChar, -1)
-            {
-                Value = description is null ? DBNull.Value : description
-            },
-            new SqlParameter("@Color", SqlDbType.VarChar, 16)
-            {
-                Value = string.IsNullOrEmpty(color) ? "#FFFFFF" : color
-            });
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        if (rows.Count == 0)
+            return new TaskStatusResult(taskStatusId, null, null);
+
+        var row = rows[0];
+        return new TaskStatusResult(
+            Convert.ToInt32(row["TaskStatusID"]),
+            GetNullableDateTime(row, "PlannedStartDate"),
+            GetNullableDateTime(row, "PlannedEndDate"));
     }
 
-    public static async Task UpdateRankingAsync(int taskId, int ranking)
+    public static async Task ApproveTaskAsync(int taskId, int actingUserId)
     {
-        await SqlHelper.ExecuteAsync("UpdateRanking", true,
+        await SqlHelper.ExecuteAsync("ApproveTask", true,
             new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@Ranking", SqlDbType.Int) { Value = ranking });
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task UpdateTaskStatusAsync(int taskId, int taskStatusId)
-    {
-        await SqlHelper.ExecuteAsync("UpdateTaskStatus", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@TaskStatusID", SqlDbType.Int) { Value = taskStatusId });
-    }
-
-    public static async Task DeleteTaskAsync(int taskId)
+    public static async Task DeleteTaskAsync(int taskId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeleteTask", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId });
+            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<TodoTask?> GetTaskAsync(int taskId)
+    public static async Task<TodoTask?> GetTaskAsync(int taskId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetTask", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId });
+            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Count == 0 ? null : new TodoTask(rows[0]);
     }
 
@@ -96,44 +175,189 @@ public static class TaskRepository
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    public static async Task<List<TodoTask>> GetChildTasksAsync(int taskParentId)
+    public static async Task<List<TodoTask>> GetGroupParentTasksAsync(int groupId, int actingUserId)
+    {
+        var rows = await SqlHelper.QueryAsync("GetGroupParentTasks", true,
+            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        return rows.Select(r => new TodoTask(r)).ToList();
+    }
+
+    public static async Task<List<TodoTask>> GetChildTasksAsync(int taskParentId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetTaskChildrensByRanking", true,
-            new SqlParameter("@TaskParentID", SqlDbType.Int) { Value = taskParentId });
+            new SqlParameter("@TaskParentID", SqlDbType.Int) { Value = taskParentId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
     /// <summary>
-    /// Parent tasks of a group. No stored procedure exists for this, so a parameterized
-    /// query is used (tasks are not restricted to a single user because the whole group shares them).
+    /// Reorders an entire list with a single call. <paramref name="orderedTaskIds"/> must
+    /// contain exactly the visible top-level tasks of the scope, in their desired order.
     /// </summary>
-    public static async Task<List<TodoTask>> GetTasksByGroupAsync(int groupId)
+    public static async Task ReorderTasksAsync(
+        int userId, int? groupId, IReadOnlyList<int> orderedTaskIds, int actingUserId)
     {
-        var rows = await SqlHelper.QueryAsync(
-            "SELECT * FROM Tasks WHERE GroupID = @GroupID AND TaskParentID IS NULL ORDER BY Ranking, LevelOfImportanceID DESC",
-            false,
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId });
+        await SqlHelper.ExecuteAsync("ReorderTasks", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@GroupID", SqlDbType.Int)
+            {
+                Value = groupId ?? (object)DBNull.Value
+            },
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(orderedTaskIds)),
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+    }
+
+    public static async Task<List<TodoTask>> GetTasksByIdsAsync(IReadOnlyList<int> taskIds)
+    {
+        var rows = await SqlHelper.QueryAsync("GetTasksByIds", true,
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)));
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    public static async Task<List<TodoTaskStatus>> GetTaskStatusesAsync()
+    public static async Task<List<TaskListExtras>> GetTaskListExtrasAsync(IReadOnlyList<int> taskIds)
     {
-        var rows = await SqlHelper.QueryAsync("SELECT * FROM TaskStatus ORDER BY TaskStatusID", false);
-        return rows.Select(r => new TodoTaskStatus(r)).ToList();
+        var rows = await SqlHelper.QueryAsync("GetTaskListExtras", true,
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)));
+
+        return rows.Select(r => new TaskListExtras(
+            Convert.ToInt32(r["TaskID"]),
+            Convert.ToInt32(r["SubtaskCount"]),
+            Convert.ToInt32(r["SubtaskCompletedCount"]),
+            Convert.ToBoolean(r["HasAttachments"]),
+            GetNullableInt(r, "AssignedToUserID"),
+            GetString(r, "AssignedToName"),
+            GetString(r, "AssignedToColor"),
+            GetNullableDateTime(r, "DueStartDate"),
+            GetNullableDateTime(r, "DueEndDate"),
+            GetNullableInt(r, "RepetitionTypeID"),
+            GetString(r, "RepetitionName"))).ToList();
     }
 
-    public static async Task<List<LevelOfImportance>> GetImportanceLevelsAsync()
+    /// <summary>
+    /// Loads the full detail payload (task + steps + attachment metadata + assignees)
+    /// in one round trip. Returns null when the task does not exist.
+    /// </summary>
+    public static async Task<TaskDetailBundle?> GetTaskExtrasAsync(int taskId, int actingUserId)
     {
-        var rows = await SqlHelper.QueryAsync("SELECT * FROM LevelOfImportance ORDER BY LevelOfImportanceID", false);
-        return rows.Select(r => new LevelOfImportance(r)).ToList();
+        await using var results = await SqlHelper.QueryMultipleAsync("GetTaskExtras",
+            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        var taskTable = await results.ReadAsync();
+        if (taskTable is null || taskTable.Rows.Count == 0)
+            return null;
+
+        var taskRow = taskTable.Rows[0];
+
+        var stepsTable = await results.ReadAsync() ?? new DataTable();
+        var attachmentsTable = await results.ReadAsync() ?? new DataTable();
+        var assigneesTable = await results.ReadAsync() ?? new DataTable();
+
+        return new TaskDetailBundle(
+            taskRow,
+            stepsTable.Rows.Cast<DataRow>().Select(r => new TodoTask(r)).ToList(),
+            attachmentsTable.Rows.Cast<DataRow>().Select(ToAttachment).ToList(),
+            assigneesTable.Rows.Cast<DataRow>().Select(ToLookupUser).ToList(),
+            Convert.ToBoolean(taskRow["CanManage"]),
+            GetString(taskRow, "OwnerName") ?? string.Empty,
+            GetString(taskRow, "OwnerColor") ?? string.Empty);
     }
+
+    public static async Task<TaskCounts> GetTaskCountsAsync(int userId, int actingUserId)
+    {
+        var rows = await SqlHelper.QueryAsync("GetTaskCounts", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        if (rows.Count == 0)
+            return new TaskCounts(0, 0, 0, 0, 0, 0, 0, 0);
+
+        var row = rows[0];
+        return new TaskCounts(
+            Convert.ToInt32(row["AllCount"]),
+            Convert.ToInt32(row["TodayCount"]),
+            Convert.ToInt32(row["ImportantCount"]),
+            Convert.ToInt32(row["PlannedCount"]),
+            Convert.ToInt32(row["AssignedCount"]),
+            Convert.ToInt32(row["WeeklyCount"]),
+            Convert.ToInt32(row["MonthlyCount"]),
+            Convert.ToInt32(row["YearlyCount"]));
+    }
+
+    /// <summary>Loads ALL small lookup tables in one round trip.</summary>
+    public static async Task<LookupBundle> GetLookupsAsync()
+    {
+        await using var results = await SqlHelper.QueryMultipleAsync("GetLookups");
+
+        var statuses = new List<TodoTaskStatus>();
+        var repetitions = new List<RepetitionType>();
+        var levels = new List<LevelOfImportance>();
+        var users = new List<User>();
+
+        var statusTable = await results.ReadAsync();
+        if (statusTable is not null)
+        {
+            foreach (DataRow row in statusTable.Rows)
+            {
+                statuses.Add(new TodoTaskStatus
+                {
+                    TaskStatusID = Convert.ToInt32(row["ID"]),
+                    StatusName = Convert.ToString(row["Name"]) ?? string.Empty
+                });
+            }
+        }
+
+        var repetitionTable = await results.ReadAsync();
+        if (repetitionTable is not null)
+        {
+            foreach (DataRow row in repetitionTable.Rows)
+            {
+                repetitions.Add(new RepetitionType
+                {
+                    RepetitionTypeID = Convert.ToInt32(row["ID"]),
+                    RepetitionName = Convert.ToString(row["Name"]) ?? string.Empty
+                });
+            }
+        }
+
+        var levelTable = await results.ReadAsync();
+        if (levelTable is not null)
+        {
+            foreach (DataRow row in levelTable.Rows)
+            {
+                levels.Add(new LevelOfImportance
+                {
+                    LevelOfImportanceID = Convert.ToInt32(row["ID"]),
+                    LevelName = Convert.ToString(row["Name"]) ?? string.Empty,
+                    Color = GetString(row, "Color") ?? string.Empty
+                });
+            }
+        }
+
+        var userTable = await results.ReadAsync();
+        if (userTable is not null)
+        {
+            foreach (DataRow row in userTable.Rows)
+                users.Add(ToLookupUser(row));
+        }
+
+        return new LookupBundle(statuses, levels, repetitions, users);
+    }
+
+    public static async Task<List<TodoTaskStatus>> GetTaskStatusesAsync() =>
+        (await GetLookupsAsync()).Statuses;
+
+    public static async Task<List<LevelOfImportance>> GetImportanceLevelsAsync() =>
+        (await GetLookupsAsync()).Levels;
 
     /// <summary>
     /// Counts visible (non-completed) parent tasks for a smart-view badge.
+    /// Kept for backward compatibility; newer callers should prefer GetTaskCountsAsync.
     /// </summary>
     public static async Task<int> CountParentTasksAsync(int userId, int? importanceLevelId = null)
     {
-        var sql = "SELECT COUNT(*) FROM Tasks WHERE UserID = @UserID AND TaskParentID IS NULL AND TaskStatusID <> 3";
+        var sql = "SELECT COUNT(*) FROM Tasks WHERE UserID = @UserID AND TaskParentID IS NULL AND TaskStatusID <> 3 AND GroupID IS NULL";
         var parameters = new List<SqlParameter> { new("@UserID", SqlDbType.Int) { Value = userId } };
         if (importanceLevelId.HasValue)
         {
@@ -144,4 +368,35 @@ public static class TaskRepository
         var result = await SqlHelper.ScalarAsync(sql, parameters.ToArray());
         return Convert.ToInt32(result);
     }
+
+    private static User ToLookupUser(DataRow row) =>
+        new()
+        {
+            UserID = Convert.ToInt32(row["UserID"]),
+            UserName = GetString(row, "UserName") ?? string.Empty,
+            ShowName = GetString(row, "ShowName") ?? string.Empty,
+            UserEmail = string.Empty,
+            PasswordHash = string.Empty,
+            PermissionID = 1,
+            Color = GetString(row, "Color") ?? string.Empty
+        };
+
+    private static Attachment ToAttachment(DataRow row) =>
+        new()
+        {
+            AttachmentID = Convert.ToInt32(row["AttachmentID"]),
+            TaskID = Convert.ToInt32(row["TaskID"]),
+            FileName = GetString(row, "FileName") ?? string.Empty,
+            FileData = Array.Empty<byte>(),
+            FileSizeKB = Convert.ToInt32(row["FileSizeKB"])
+        };
+
+    private static string? GetString(DataRow row, string column) =>
+        row.IsNull(column) ? null : Convert.ToString(row[column]);
+
+    private static int? GetNullableInt(DataRow row, string column) =>
+        row.IsNull(column) ? null : Convert.ToInt32(row[column]);
+
+    private static DateTime? GetNullableDateTime(DataRow row, string column) =>
+        row.IsNull(column) ? null : Convert.ToDateTime(row[column]);
 }

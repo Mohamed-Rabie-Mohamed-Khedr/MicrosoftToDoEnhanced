@@ -8,7 +8,7 @@ public class UserViewModel
 
     public int UserID => User.UserID;
     public string ShowName => User.ShowName;
-    public string UserEmail => User.UserEmail;
+    public string? UserEmail => User.UserEmail;
     public string Color => User.Color;
     public bool IsAdmin => User.PermissionID == 2;
 }

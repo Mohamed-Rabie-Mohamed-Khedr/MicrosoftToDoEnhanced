@@ -1,32 +1,34 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using System.Windows.Input;
 using Core.Repositories;
+using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
 /// <summary>
 /// DataContext of GroupSettingsView. Supports creating/editing a group, member
-/// management, the activity feed (AddPostInGroup / GetPreviousCommentsInGroup)
-/// and the danger zone for the admin.
+/// management, the activity feed (keyset-paged group posts) and the danger zone
+/// for the admin.
 /// </summary>
 public class GroupSettingsViewModel : ViewModelBase
 {
-    private const int DefaultLoadWindowEnd = 10;
+    private const int PageSize = 20;
 
     private readonly User _currentUser;
     private readonly MainViewModel _owner;
     private readonly Group _workingGroup;
-    private readonly Dictionary<int, User> _authorCache = new();
+    private readonly IConfirmationService _confirmation;
 
     private int? _groupId;
     private bool _hasMorePosts;
-    private int _loadWindowEnd;
+    private int? _lowestPostId;
 
-    public GroupSettingsViewModel(User currentUser, Group? existing, MainViewModel owner)
+    public GroupSettingsViewModel(
+        User currentUser, Group? existing, MainViewModel owner, IConfirmationService confirmation)
     {
         _currentUser = currentUser;
         _owner = owner;
+        _confirmation = confirmation;
 
         _workingGroup = existing is null
             ? new Group { AdminID = currentUser.UserID, GroupName = string.Empty, Color = "#0078D4" }
@@ -82,6 +84,9 @@ public class GroupSettingsViewModel : ViewModelBase
 
     public bool IsOwner => _workingGroup.AdminID == _currentUser.UserID;
 
+    /// <summary>The working group id once it exists (null while creating an unsaved group).</summary>
+    public int? GroupId => _groupId;
+
     public bool HasMorePosts
     {
         get => _hasMorePosts;
@@ -129,7 +134,7 @@ public class GroupSettingsViewModel : ViewModelBase
             return;
         }
 
-        await GroupRepository.AddGroupMemberAsync(groupId, user.UserID);
+        await GroupRepository.AddGroupMemberAsync(groupId, user.UserID, _currentUser.UserID);
         NewMemberEmail = string.Empty;
         OnPropertyChanged(nameof(NewMemberEmail));
         await LoadMembersAsync(groupId);
@@ -144,7 +149,7 @@ public class GroupSettingsViewModel : ViewModelBase
         if (member.UserID == _workingGroup.AdminID)
             return;
 
-        await GroupRepository.DeleteGroupMemberAsync(groupId, member.UserID);
+        await GroupRepository.DeleteGroupMemberAsync(groupId, member.UserID, _currentUser.UserID);
         Members.Remove(member);
         _owner.RaiseToast("Member removed");
     }
@@ -162,24 +167,18 @@ public class GroupSettingsViewModel : ViewModelBase
 
         if (_groupId is int existingId)
         {
-            await GroupRepository.UpdateGroupAsync(existingId, _workingGroup.AdminID, name, description, Color);
+            await GroupRepository.UpdateGroupAsync(existingId, _currentUser.UserID, name, description, Color);
             _owner.RaiseToast("Group saved");
-        }
-        else
-        {
-            await GroupRepository.AddGroupAsync(_workingGroup.AdminID, name, description, Color);
-            _groupId = await GroupRepository.GetGroupIdAsync(_workingGroup.AdminID, name);
-            if (_groupId is null)
-            {
-                _owner.RaiseToast("Could not create the group");
-                return;
-            }
-
-            await LoadMembersAsync(_groupId.Value);
-            _owner.RaiseToast("Group created");
+            RequestClose?.Invoke(this, EventArgs.Empty);
+            return;
         }
 
-        RequestClose?.Invoke(this, EventArgs.Empty);
+        // Create path: keep the dialog open so the user can invite members/post right away.
+        // The dialog only closes when the user explicitly does so.
+        _groupId = await GroupRepository.AddGroupAsync(_workingGroup.AdminID, name, description, Color);
+        _workingGroup.GroupID = _groupId.Value;
+        await LoadMembersAsync(_groupId.Value);
+        _owner.RaiseToast("Group created");
     }
 
     private async Task DeleteGroupAsync()
@@ -187,15 +186,13 @@ public class GroupSettingsViewModel : ViewModelBase
         if (_groupId is not int groupId || !IsOwner)
             return;
 
-        var confirm = MessageBox.Show(
-            "This deletes the group, its tasks and its feed for everyone. Continue?",
+        var confirmed = _confirmation.Confirm(
             "Delete group",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+            "This deletes the group, its tasks and its feed for everyone. Continue?");
+        if (!confirmed)
             return;
 
-        await GroupRepository.DeleteGroupAsync(groupId);
+        await GroupRepository.DeleteGroupAsync(groupId, _currentUser.UserID);
         _owner.RaiseToast("Group deleted");
         RequestClose?.Invoke(this, EventArgs.Empty);
     }
@@ -223,39 +220,29 @@ public class GroupSettingsViewModel : ViewModelBase
         if (_groupId is not int groupId)
             return;
 
-        _loadWindowEnd += DefaultLoadWindowEnd;
-        await LoadPostsCoreAsync(groupId);
+        await AppendPostsAsync(groupId);
     }
 
     private async Task LoadPostsAsync(int groupId)
     {
-        _loadWindowEnd = DefaultLoadWindowEnd;
-        await LoadPostsCoreAsync(groupId);
-    }
-
-    private async Task LoadPostsCoreAsync(int groupId)
-    {
-        var posts = await PostRepository.GetPreviousCommentsAsync(groupId, _loadWindowEnd);
-
+        _lowestPostId = null;
         Posts.Clear();
-        foreach (var post in posts)
-        {
-            var author = await GetAuthorAsync(post.UserID);
-            Posts.Add(new PostItemViewModel(post, author?.ShowName ?? "Unknown", author?.Color ?? "#707070"));
-        }
-
-        HasMorePosts = _loadWindowEnd >= DefaultLoadWindowEnd
-            && await PostRepository.HasPostsAfterAsync(groupId, _loadWindowEnd);
+        await AppendPostsAsync(groupId);
     }
 
-    private async Task<User?> GetAuthorAsync(int userId)
+    /// <summary>
+    /// Fetches the next page using the keyset cursor and appends it to the existing
+    /// collection. Never clears: only a fresh load (<see cref="LoadPostsAsync"/>) does that.
+    /// </summary>
+    private async Task AppendPostsAsync(int groupId)
     {
-        if (_authorCache.TryGetValue(userId, out var cached))
-            return cached;
+        var posts = await PostRepository.GetPostsAsync(groupId, _currentUser.UserID, _lowestPostId, PageSize);
 
-        var user = await UserRepository.GetUserAsync(userId);
-        if (user is not null)
-            _authorCache[userId] = user;
-        return user;
+        foreach (var post in posts)
+            Posts.Add(new PostItemViewModel(post));
+
+        HasMorePosts = posts.Count == PageSize;
+        if (posts.Count > 0)
+            _lowestPostId = posts.Min(p => p.PostID);
     }
 }
