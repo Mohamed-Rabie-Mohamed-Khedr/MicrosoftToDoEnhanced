@@ -52,15 +52,15 @@ public class AsyncRelayCommand : ICommand
 {
     private readonly Func<Task> _execute;
     private readonly Func<bool>? _canExecute;
+    private readonly Action<Exception>? _onError;
     private bool _isRunning;
 
-    public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null)
+    public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null, Action<Exception>? onError = null)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
+        _onError = onError;
     }
-
-    public static Action<Exception>? ErrorHandler { get; set; }
 
     public event EventHandler? CanExecuteChanged
     {
@@ -84,7 +84,7 @@ public class AsyncRelayCommand : ICommand
         }
         catch (Exception exception)
         {
-            ErrorHandler?.Invoke(exception);
+            _onError?.Invoke(exception);
         }
         finally
         {
@@ -101,12 +101,14 @@ public class AsyncRelayCommand<T> : ICommand
 {
     private readonly Func<T?, Task> _execute;
     private readonly Func<T?, bool>? _canExecute;
+    private readonly Action<Exception>? _onError;
     private bool _isRunning;
 
-    public AsyncRelayCommand(Func<T?, Task> execute, Func<T?, bool>? canExecute = null)
+    public AsyncRelayCommand(Func<T?, Task> execute, Func<T?, bool>? canExecute = null, Action<Exception>? onError = null)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
+        _onError = onError;
     }
 
     public event EventHandler? CanExecuteChanged
@@ -131,7 +133,7 @@ public class AsyncRelayCommand<T> : ICommand
         }
         catch (Exception exception)
         {
-            AsyncRelayCommand.ErrorHandler?.Invoke(exception);
+            _onError?.Invoke(exception);
         }
         finally
         {

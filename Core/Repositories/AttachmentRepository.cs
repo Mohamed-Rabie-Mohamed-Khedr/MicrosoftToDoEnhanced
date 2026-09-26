@@ -6,10 +6,11 @@ namespace Core.Repositories;
 
 public static class AttachmentRepository
 {
-    public static async Task<List<Attachment>> GetAttachmentInfosAsync(IReadOnlyList<int> taskIds)
+    public static async Task<List<Attachment>> GetAttachmentInfosAsync(IReadOnlyList<int> taskIds, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetAttachmentInfos", true,
-            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)));
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)),
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
 
         var attachments = new List<Attachment>(rows.Count);
         foreach (DataRow row in rows)

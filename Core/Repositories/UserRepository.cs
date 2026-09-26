@@ -29,7 +29,7 @@ public static class UserRepository
             "SELECT * FROM Users WHERE UserName = @UserName",
             false,
             new SqlParameter("@UserName", SqlDbType.NVarChar, 100) { Value = userName });
-        return rows.Count == 0 ? null : new User(rows[0]);
+        return rows.Count == 0 ? null : Scrubbed(rows[0]);
     }
 
     public static async Task<User?> GetUserByEmailAsync(string email)
@@ -49,27 +49,25 @@ public static class UserRepository
         return user;
     }
 
-    public static async Task<User?> GetUserAsync(int userId)
+    public static async Task<User?> GetUserAsync(int userId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetUser", true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
-        if (rows.Count == 0)
-            return null;
-
-        var user = new User(rows[0]);
-        user.PasswordHash = string.Empty;
-        return user;
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        return rows.Count == 0 ? null : Scrubbed(rows[0]);
     }
 
     public static async Task<List<User>> GetAllUsersAsync()
     {
         var rows = await SqlHelper.QueryAsync("SELECT * FROM Users ORDER BY ShowName", false);
-        return rows.Select(r =>
-        {
-            var user = new User(r);
-            user.PasswordHash = string.Empty;
-            return user;
-        }).ToList();
+        return rows.Select(Scrubbed).ToList();
+    }
+
+    private static User Scrubbed(DataRow row)
+    {
+        var user = new User(row);
+        user.PasswordHash = string.Empty;
+        return user;
     }
 
     public static async Task<int> AddUserAsync(
@@ -90,7 +88,7 @@ public static class UserRepository
     }
 
     public static async Task UpdateUserProfileAsync(
-        int userId, string userName, string showName, string? email, string color)
+        int userId, int actingUserId, string userName, string showName, string? email, string color)
     {
         await SqlHelper.ExecuteAsync("UpdateUserProfile", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
@@ -100,14 +98,16 @@ public static class UserRepository
             {
                 Value = string.IsNullOrWhiteSpace(email) ? DBNull.Value : email
             },
-            new SqlParameter("@Color", SqlDbType.VarChar, 16) { Value = color });
+            new SqlParameter("@Color", SqlDbType.VarChar, 16) { Value = color },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task UpdatePasswordHashAsync(int userId, string passwordHash)
+    public static async Task UpdatePasswordHashAsync(int userId, int actingUserId, string passwordHash)
     {
         await SqlHelper.ExecuteAsync("UpdatePasswordHash", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash });
+            new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
     public static async Task DeleteUserAsync(int userId, int actingUserId)
@@ -119,9 +119,15 @@ public static class UserRepository
 
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
     {
+        /// <summary>Non-zero when the caller is rate limited and must wait before retrying.</summary>
+        public TimeSpan RetryAfter { get; init; }
+
+        public bool IsThrottled => RetryAfter > TimeSpan.Zero;
+
         public static SignInResult Succeeded(User user) => new(true, user, false);
         public static SignInResult Failed() => new(false, null, false);
         public static SignInResult Migrated(User user) => new(true, user, true);
+        public static SignInResult Throttled(TimeSpan retryAfter) => new(false, null, false) { RetryAfter = retryAfter };
     }
 
     public sealed record RegisterResult(bool Success, string? ErrorMessage)
@@ -130,29 +136,156 @@ public static class UserRepository
         public static RegisterResult Failed(string message) => new(false, message);
     }
 
+    /// <summary>
+    /// In-process brute-force throttle. Tracks consecutive failures per user name and
+    /// escalates an artificial delay plus a temporary lock-out, so guessing a password
+    /// is orders of magnitude slower than a legitimate sign-in.
+    /// </summary>
+    private sealed class SignInThrottle
+    {
+        private const int FreeAttempts = 4;
+
+        // Without a cap, unknown user names would grow the table without limit.
+        private const int MaxTrackedNames = 512;
+
+        private static readonly TimeSpan BasePenalty = TimeSpan.FromMilliseconds(250);
+        private static readonly TimeSpan MaxPenalty = TimeSpan.FromSeconds(4);
+        private static readonly TimeSpan BaseLockout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan MaxLockout = TimeSpan.FromSeconds(60);
+
+        private sealed class Entry
+        {
+            public int Failures;
+            public long LockedUntil;
+        }
+
+        // Keyed case-insensitively so "Alice" and "alice" share one attempt budget.
+        private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Lock _gate = new();
+
+        public TimeSpan GetRetryAfter(string userName)
+        {
+            lock (_gate)
+            {
+                if (!_entries.TryGetValue(userName, out var entry))
+                    return TimeSpan.Zero;
+
+                var now = Environment.TickCount64;
+                return entry.LockedUntil > now
+                    ? TimeSpan.FromMilliseconds(entry.LockedUntil - now)
+                    : TimeSpan.Zero;
+            }
+        }
+
+        /// <summary>Records a failed attempt and returns how long to stall before replying.</summary>
+        public TimeSpan RegisterFailure(string userName)
+        {
+            lock (_gate)
+            {
+                EvictIfFull();
+
+                if (!_entries.TryGetValue(userName, out var entry))
+                    _entries[userName] = entry = new Entry();
+
+                entry.Failures++;
+
+                if (entry.Failures > FreeAttempts)
+                {
+                    var scale = Math.Min(entry.Failures - FreeAttempts - 1, 8);
+                    var lockout = TimeSpan.FromTicks(BaseLockout.Ticks * (1L << scale));
+                    if (lockout > MaxLockout)
+                        lockout = MaxLockout;
+
+                    entry.LockedUntil = Environment.TickCount64 + (long)lockout.TotalMilliseconds;
+                }
+
+                var penalty = TimeSpan.FromTicks(BasePenalty.Ticks * (1L << Math.Min(entry.Failures - 1, 8)));
+                return penalty > MaxPenalty ? MaxPenalty : penalty;
+            }
+        }
+
+        public void RegisterSuccess(string userName)
+        {
+            lock (_gate)
+            {
+                _entries.Remove(userName);
+            }
+        }
+
+        /// <summary>
+        /// Drops expired entries first, then the entries closest to their free-attempt
+        /// budget, so real accounts under attack keep their counters.
+        /// </summary>
+        private void EvictIfFull()
+        {
+            if (_entries.Count < MaxTrackedNames)
+                return;
+
+            long now = Environment.TickCount64;
+            foreach (string name in _entries.Where(p => p.Value.LockedUntil <= now).Select(p => p.Key).ToList())
+                _entries.Remove(name);
+
+            while (_entries.Count >= MaxTrackedNames)
+            {
+                var victim = _entries
+                    .OrderBy(p => p.Value.Failures)
+                    .ThenBy(p => p.Value.LockedUntil)
+                    .First();
+
+                _entries.Remove(victim.Key);
+            }
+        }
+    }
+
+    private static readonly SignInThrottle SignInAttempts = new();
+
+    /// <summary>
+    /// A throw-away hash used to spend roughly the same CPU on an unknown user name as
+    /// on a known one, so sign-in timing does not reveal which accounts exist.
+    /// </summary>
+    private static readonly string DecoyHash =
+        PasswordHasher.Hash(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+
     public static async Task<SignInResult> SignInAsync(string userName, string password)
     {
         var trimmedName = userName?.Trim();
         if (string.IsNullOrEmpty(trimmedName) || string.IsNullOrEmpty(password))
             return SignInResult.Failed();
 
+        var key = trimmedName.ToUpperInvariant();
+
+        var retryAfter = SignInAttempts.GetRetryAfter(key);
+        if (retryAfter > TimeSpan.Zero)
+            return SignInResult.Throttled(retryAfter);
+
         var storedHash = await GetUserPasswordHashAsync(trimmedName);
         if (string.IsNullOrEmpty(storedHash))
+        {
+            // Spend comparable time, then charge the attempt to the throttle.
+            PasswordHasher.Verify(password, DecoyHash);
+            await Task.Delay(SignInAttempts.RegisterFailure(key));
             return SignInResult.Failed();
+        }
 
         var verification = PasswordHasher.Verify(password, storedHash);
         if (!verification.Success)
+        {
+            await Task.Delay(SignInAttempts.RegisterFailure(key));
             return SignInResult.Failed();
+        }
 
         var user = await GetUserByUserNameAsync(trimmedName);
         if (user is null)
+        {
+            await Task.Delay(SignInAttempts.RegisterFailure(key));
             return SignInResult.Failed();
+        }
 
-        user.PasswordHash = string.Empty;
+        SignInAttempts.RegisterSuccess(key);
 
         if (verification.NeedsRehash || !storedHash.StartsWith("pbkdf2", StringComparison.Ordinal))
         {
-            await UpdatePasswordHashAsync(user.UserID, PasswordHasher.Hash(password));
+            await UpdatePasswordHashAsync(user.UserID, user.UserID, PasswordHasher.Hash(password));
             return SignInResult.Migrated(user);
         }
 

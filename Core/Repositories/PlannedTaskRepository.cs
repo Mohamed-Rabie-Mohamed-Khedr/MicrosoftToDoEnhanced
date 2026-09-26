@@ -89,17 +89,4 @@ public static class PlannedTaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
-
-    public static async Task<int> CountPlannedTasksAsync(int userId, PlannedScope scope, int actingUserId)
-    {
-        var counts = await TaskRepository.GetTaskCountsAsync(userId, actingUserId);
-        return scope switch
-        {
-            PlannedScope.Daily => counts.TodayCount,
-            PlannedScope.Weekly => counts.WeeklyCount,
-            PlannedScope.Monthly => counts.MonthlyCount,
-            PlannedScope.Yearly => counts.YearlyCount,
-            _ => counts.PlannedCount
-        };
-    }
 }

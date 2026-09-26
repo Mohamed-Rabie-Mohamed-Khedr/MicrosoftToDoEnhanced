@@ -1,13 +1,8 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
-
-public interface IDialogService
-{
-    bool Confirm(string title, string message);
-    void ShowMessage(string title, string message);
-}
 
 public static class TaskExtensions
 {
@@ -19,13 +14,17 @@ public static class TaskExtensions
         }
         catch (Exception exception)
         {
-            (onError ?? AsyncRelayCommand.ErrorHandler)?.Invoke(exception);
+            AppLogger.LogError("Unhandled error in a background operation.", exception);
+            (onError ?? ViewModelBase.DefaultErrorHandler)?.Invoke(exception);
         }
     }
 }
 
 public abstract class ViewModelBase : INotifyPropertyChanged
 {
+    /// <summary>Used by background work that has no owning view model to report through.</summary>
+    public static Action<Exception>? DefaultErrorHandler { get; set; }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>

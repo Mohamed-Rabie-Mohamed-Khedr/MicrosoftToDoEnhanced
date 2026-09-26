@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 
 namespace MicrosoftToDoEnhanced.Services;
@@ -26,8 +27,9 @@ public static class AppLogger
                 File.AppendAllText(LogFile, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}");
             }
         }
-        catch
+        catch (Exception exception)
         {
+            Debug.WriteLine($"Logging failed: {exception}");
         }
     }
 

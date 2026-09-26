@@ -44,13 +44,21 @@ public class GroupSettingsViewModel : ViewModelBase
         GroupDescription = _workingGroup.GroupDescription;
         Color = _workingGroup.Color;
 
-        AddMemberCommand = new AsyncRelayCommand(async () => await AddMemberAsync());
-        RemoveMemberCommand = new AsyncRelayCommand<UserViewModel>(async member => await RemoveMemberAsync(member));
-        DeleteGroupCommand = new AsyncRelayCommand(async () => await DeleteGroupAsync());
-        SaveGroupCommand = new AsyncRelayCommand(async () => await SaveGroupAsync());
+        AddMemberCommand = new AsyncRelayCommand(AddMemberAsync, onError: OnCommandError);
+        RemoveMemberCommand = new AsyncRelayCommand<UserViewModel>(RemoveMemberAsync, onError: OnCommandError);
+        DeleteGroupCommand = new AsyncRelayCommand(DeleteGroupAsync, onError: OnCommandError);
+        SaveGroupCommand = new AsyncRelayCommand(SaveGroupAsync, onError: OnCommandError);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
-        AddPostCommand = new AsyncRelayCommand(async () => await AddPostAsync());
-        LoadMorePostsCommand = new AsyncRelayCommand(async () => await LoadMorePostsAsync());
+        AddPostCommand = new AsyncRelayCommand(AddPostAsync, onError: OnCommandError);
+        LoadMorePostsCommand = new AsyncRelayCommand(LoadMorePostsAsync, onError: OnCommandError);
+    }
+
+    private void OnCommandError(Exception exception)
+    {
+        AppLogger.LogError("Group settings command", exception);
+        _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.Message
+            : "Something went wrong. Please try again.");
     }
 
     public event EventHandler? RequestClose;
@@ -115,7 +123,7 @@ public class GroupSettingsViewModel : ViewModelBase
 
     private async Task LoadMembersAsync(int groupId)
     {
-        var members = await GroupRepository.GetGroupMembersAsync(groupId);
+        var members = await GroupRepository.GetGroupMembersAsync(groupId, _currentUser.UserID);
         Members.Clear();
         foreach (var user in members)
             Members.Add(new UserViewModel(user));
@@ -220,7 +228,7 @@ public class GroupSettingsViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(NewPostContent))
             return;
 
-        await PostRepository.AddPostAsync(groupId, _currentUser.UserID, NewPostContent.Trim());
+        await PostRepository.AddPostAsync(groupId, _currentUser.UserID, _currentUser.UserID, NewPostContent.Trim());
         NewPostContent = string.Empty;
         OnPropertyChanged(nameof(NewPostContent));
         await LoadPostsAsync(groupId);

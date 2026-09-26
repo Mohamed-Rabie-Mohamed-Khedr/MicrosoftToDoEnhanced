@@ -86,17 +86,30 @@ public static class GroupRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<List<User>> GetGroupMembersAsync(int groupId)
+    public static async Task<List<User>> GetGroupMembersAsync(int groupId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync(
             """
+            IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
+                THROW 50001, N'You do not have access to this group.', 1;
+
             SELECT U.* FROM Users U
             WHERE U.UserID = (SELECT AdminID FROM Groups WHERE GroupID = @GroupID)
                OR U.UserID IN (SELECT UserID FROM GroupMembers WHERE GroupID = @GroupID)
             ORDER BY U.ShowName
             """,
             false,
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId });
-        return rows.Select(r => new User(r)).ToList();
+            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+
+        var members = new List<User>(rows.Count);
+        foreach (var row in rows)
+        {
+            var member = new User(row);
+            member.PasswordHash = string.Empty;
+            members.Add(member);
+        }
+
+        return members;
     }
 }

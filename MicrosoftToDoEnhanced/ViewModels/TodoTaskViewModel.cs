@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows.Input;
 using Core.Repositories;
 using Microsoft.Win32;
+using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
@@ -44,13 +45,21 @@ public class TodoTaskViewModel : ViewModelBase
         _taskName = model.TaskName;
         _description = model.Description;
 
-        AddStepCommand = new AsyncRelayCommand(async () => await AddStepAsync());
-        ToggleStepCommand = new AsyncRelayCommand<TodoTaskViewModel>(async step => await ToggleStepAsync(step));
-        RemoveStepCommand = new AsyncRelayCommand<TodoTaskViewModel>(async step => await RemoveStepAsync(step));
-        AddAttachmentCommand = new AsyncRelayCommand(async () => await AddAttachmentAsync());
-        RemoveAttachmentCommand = new AsyncRelayCommand<Attachment>(async attachment => await RemoveAttachmentAsync(attachment));
-        DeleteTaskCommand = new AsyncRelayCommand(async () => await DeleteAsync());
-        SaveTaskCommand = new AsyncRelayCommand(async () => await SaveAsync());
+        AddStepCommand = new AsyncRelayCommand(AddStepAsync, onError: OnAsyncCommandError);
+        ToggleStepCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleStepAsync, onError: OnAsyncCommandError);
+        RemoveStepCommand = new AsyncRelayCommand<TodoTaskViewModel>(RemoveStepAsync, onError: OnAsyncCommandError);
+        AddAttachmentCommand = new AsyncRelayCommand(AddAttachmentAsync, onError: OnAsyncCommandError);
+        RemoveAttachmentCommand = new AsyncRelayCommand<Attachment>(RemoveAttachmentAsync, onError: OnAsyncCommandError);
+        DeleteTaskCommand = new AsyncRelayCommand(DeleteAsync, onError: OnAsyncCommandError);
+        SaveTaskCommand = new AsyncRelayCommand(SaveAsync, onError: OnAsyncCommandError);
+    }
+
+    private void OnAsyncCommandError(Exception exception)
+    {
+        AppLogger.LogError($"Command execution failed for task {TaskID}.", exception);
+        _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.Message
+            : "Something went wrong. Please try again.");
     }
 
     public TodoTask Model => _model;
@@ -111,6 +120,18 @@ public class TodoTaskViewModel : ViewModelBase
         _levelNames.GetValueOrDefault(_model.LevelOfImportanceID);
 
     public string? LevelColor => null;
+
+    private bool _canReorder = true;
+
+    /// <summary>
+    /// Mirrors <see cref="MainViewModel.CanReorderTasks"/>; the list item hides its
+    /// drag handle when the current view's order is not the stored order.
+    /// </summary>
+    public bool CanReorder
+    {
+        get => _canReorder;
+        set => SetProperty(ref _canReorder, value);
+    }
 
     public int LevelOfImportanceId
     {
@@ -296,7 +317,7 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task ReloadAttachmentsAsync()
     {
-        var attachments = await AttachmentRepository.GetAttachmentInfosAsync(new[] { TaskID });
+        var attachments = await AttachmentRepository.GetAttachmentInfosAsync(new[] { TaskID }, _owner.CurrentUserId);
 
         Attachments.Clear();
         foreach (var attachment in attachments)
@@ -307,12 +328,12 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task LoadAssignedAsync()
     {
-        var assigned = await AssignedTaskRepository.GetByTaskAsync(TaskID);
+        var assigned = await AssignedTaskRepository.GetByTaskAsync(TaskID, _owner.CurrentUserId);
         if (assigned.Count == 0)
             return;
 
         _assignedId = assigned[0].AssignedID;
-        var assignee = await AssignedTaskRepository.GetAssignedUserAsync(TaskID);
+        var assignee = await AssignedTaskRepository.GetAssignedUserAsync(TaskID, _owner.CurrentUserId);
         if (assignee is null)
             return;
 

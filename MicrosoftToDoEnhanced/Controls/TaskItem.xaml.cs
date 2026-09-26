@@ -30,15 +30,30 @@ public partial class TaskItem : UserControl
             listBoxItem.IsSelected = true;
     }
 
+    /// <summary>
+    /// Today and Planned are ordered by date and Important is a filtered subset of
+    /// "All", so a drop there would move items in a way the user did not intend.
+    /// </summary>
+    private static bool ReorderAllowed(object? dataContext) =>
+        dataContext is not ViewModels.TodoTaskViewModel task || task.CanReorder;
+
     private void OnDragGripPressed(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is null) return;
+        if (DataContext is null || !ReorderAllowed(DataContext))
+        {
+            e.Handled = true;
+            return;
+        }
+
         DragDrop.DoDragDrop(this, new DataObject(typeof(object), DataContext), DragDropEffects.Move);
         e.Handled = true;
     }
 
     private void OnDrop(object sender, DragEventArgs e)
     {
+        if (!ReorderAllowed(DataContext))
+            return;
+
         if (e.Data.GetData(typeof(object)) is not { } dragged) return;
         if (ReferenceEquals(dragged, DataContext)) return;
 

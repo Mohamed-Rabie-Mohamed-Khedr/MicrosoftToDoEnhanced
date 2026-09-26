@@ -20,12 +20,13 @@ public sealed record PostFeedItem(
 
 public static class PostRepository
 {
-    public static async Task<int> AddPostAsync(int groupId, int userId, string content)
+    public static async Task<int> AddPostAsync(int groupId, int userId, int actingUserId, string content)
     {
         var postId = await SqlHelper.ExecuteProcReturnAsync("AddPostInGroup",
             new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@PostContent", SqlDbType.NVarChar, -1) { Value = content });
+            new SqlParameter("@PostContent", SqlDbType.NVarChar, -1) { Value = content },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
 
         return postId ?? throw new InvalidOperationException("The post could not be created.");
     }

@@ -90,9 +90,15 @@ public sealed class LoginViewModel : ViewModelBase
     {
         _onAuthenticated = onAuthenticated;
 
-        SignInCommand = new AsyncRelayCommand(async () => await SignInAsync());
-        RegisterCommand = new AsyncRelayCommand(async () => await RegisterAsync());
+        SignInCommand = new AsyncRelayCommand(SignInAsync, onError: OnCommandError);
+        RegisterCommand = new AsyncRelayCommand(RegisterAsync, onError: OnCommandError);
         ToggleModeCommand = new RelayCommand(ToggleMode);
+    }
+
+    private void OnCommandError(Exception exception)
+    {
+        AppLogger.LogError("Login view command", exception);
+        LoginError = "Something went wrong. Please try again.";
     }
 
     public ICommand SignInCommand { get; }
@@ -243,7 +249,9 @@ public sealed class LoginViewModel : ViewModelBase
 
             if (!result.Success)
             {
-                LoginError = "Incorrect username or password";
+                LoginError = result.IsThrottled
+                    ? $"Too many failed attempts. Try again in {Math.Ceiling(result.RetryAfter.TotalSeconds)} second(s)."
+                    : "Incorrect username or password";
                 return;
             }
 

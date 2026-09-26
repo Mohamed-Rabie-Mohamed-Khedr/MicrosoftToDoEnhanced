@@ -49,24 +49,27 @@ public class MainViewModel : ViewModelBase
 
         Tasks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasTasks));
 
-        AddTaskCommand = new AsyncRelayCommand(async () => await AddTaskAsync());
-        OpenGroupSettingsCommand = new AsyncRelayCommand<Group>(async group => await OpenGroupSettingsAsync(group));
-        CreateGroupCommand = new AsyncRelayCommand(async () => await CreateGroupAsync());
+        AddTaskCommand = new AsyncRelayCommand(AddTaskAsync, onError: OnAsyncCommandError);
+        OpenGroupSettingsCommand = new AsyncRelayCommand<Group>(OpenGroupSettingsAsync, onError: OnAsyncCommandError);
+        CreateGroupCommand = new AsyncRelayCommand(CreateGroupAsync, onError: OnAsyncCommandError);
         SignOutCommand = new RelayCommand(() => SignOutRequested?.Invoke(this, EventArgs.Empty));
+        DeleteAccountCommand = new AsyncRelayCommand(DeleteAccountAsync, onError: OnAsyncCommandError);
         CloseDetailsCommand = new RelayCommand(() => SelectedTask = null);
         SelectTaskCommand = new RelayCommand<TodoTaskViewModel>(task => { if (task is not null) SelectedTask = task; });
-        ToggleTaskStatusCommand = new AsyncRelayCommand<TodoTaskViewModel>(async task => await ToggleTaskStatusAsync(task));
-        ReorderTasksCommand = new AsyncRelayCommand<ReorderPayload>(async payload => await ReorderTasksAsync(payload));
-
-        AsyncRelayCommand.ErrorHandler = OnAsyncCommandError;
+        ToggleTaskStatusCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleTaskStatusAsync, onError: OnAsyncCommandError);
+        ReorderTasksCommand = new AsyncRelayCommand<ReorderPayload>(ReorderTasksAsync, onError: OnAsyncCommandError);
     }
 
     private void OnAsyncCommandError(Exception exception)
     {
+        AppLogger.LogError("Command execution failed.", exception);
         RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
             ? exception.Message
             : "Something went wrong. Please try again.");
     }
+
+    private void ReportBackgroundError(Exception exception) =>
+        OnAsyncCommandError(exception);
 
     public User User { get; }
     public int CurrentUserId => User.UserID;
@@ -80,6 +83,7 @@ public class MainViewModel : ViewModelBase
     public ICommand OpenGroupSettingsCommand { get; }
     public ICommand CreateGroupCommand { get; }
     public ICommand SignOutCommand { get; }
+    public ICommand DeleteAccountCommand { get; }
     public ICommand CloseDetailsCommand { get; }
     public ICommand SelectTaskCommand { get; }
     public AsyncRelayCommand<TodoTaskViewModel> ToggleTaskStatusCommand { get; }
@@ -104,7 +108,7 @@ public class MainViewModel : ViewModelBase
                 OnPropertyChanged(nameof(SelectedSmartView));
             }
 
-            RefreshSourceAndViewAsync().SafeFireAndForget();
+            RefreshSourceAndViewAsync().SafeFireAndForget(ReportBackgroundError);
         }
     }
 
@@ -124,7 +128,7 @@ public class MainViewModel : ViewModelBase
                 OnPropertyChanged(nameof(SelectedGroup));
             }
 
-            RefreshSourceAndViewAsync().SafeFireAndForget();
+            RefreshSourceAndViewAsync().SafeFireAndForget(ReportBackgroundError);
         }
     }
 
@@ -138,7 +142,7 @@ public class MainViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsDetailOpen));
 
                 if (value is not null)
-                    value.LoadDetailsAsync().SafeFireAndForget();
+                    value.LoadDetailsAsync().SafeFireAndForget(ReportBackgroundError);
             }
         }
     }
@@ -152,7 +156,7 @@ public class MainViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _sortByImportance, value))
-                RebuildViewAsync().SafeFireAndForget();
+                RebuildView();
         }
     }
 
@@ -161,8 +165,12 @@ public class MainViewModel : ViewModelBase
         get => _showCompleted;
         set
         {
-            if (SetProperty(ref _showCompleted, value))
-                RebuildViewAsync().SafeFireAndForget();
+            if (!SetProperty(ref _showCompleted, value))
+                return;
+
+            // The sidebar badges are filtered by the same flag, so both have to be
+            // recalculated whenever it changes.
+            RefreshSourceAndViewAsync().SafeFireAndForget(ReportBackgroundError);
         }
     }
 
@@ -177,7 +185,7 @@ public class MainViewModel : ViewModelBase
             _searchDebounceCts?.Cancel();
             var cts = new CancellationTokenSource();
             _searchDebounceCts = cts;
-            RebuildViewDebouncedAsync(cts).SafeFireAndForget();
+            RebuildViewDebouncedAsync(cts).SafeFireAndForget(ReportBackgroundError);
         }
     }
 
@@ -210,7 +218,6 @@ public class MainViewModel : ViewModelBase
             await PlannedTaskRepository.AutoUpdateAsync();
             await LoadLookupsAsync();
             await RefreshGroupsAsync();
-            await RefreshCountsAsync();
             await RefreshSourceAndViewAsync();
         }
         catch (Exception)
@@ -256,10 +263,14 @@ public class MainViewModel : ViewModelBase
 
     private async Task RefreshCountsAsync()
     {
-        SetSmartViewCount(SmartViewKind.All, await TaskRepository.CountParentTasksAsync(CurrentUserId));
-        SetSmartViewCount(SmartViewKind.Important, await TaskRepository.CountParentTasksAsync(CurrentUserId, (int)TaskImportance.High));
-        SetSmartViewCount(SmartViewKind.Planned, await PlannedTaskRepository.CountPlannedTasksAsync(CurrentUserId, PlannedScope.All, CurrentUserId));
-        SetSmartViewCount(SmartViewKind.Today, await PlannedTaskRepository.CountPlannedTasksAsync(CurrentUserId, PlannedScope.Daily, CurrentUserId));
+        // One round trip and one definition of "counts", so the badges can never
+        // disagree with the numbers the list itself is built from.
+        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, CurrentUserId, ShowCompleted);
+
+        SetSmartViewCount(SmartViewKind.All, counts.AllCount);
+        SetSmartViewCount(SmartViewKind.Important, counts.ImportantCount);
+        SetSmartViewCount(SmartViewKind.Planned, counts.PlannedCount);
+        SetSmartViewCount(SmartViewKind.Today, counts.TodayCount);
     }
 
     private void SetSmartViewCount(SmartViewKind kind, int count) =>
@@ -269,8 +280,17 @@ public class MainViewModel : ViewModelBase
     {
         await LoadSourceAsync();
         await RefreshCountsAsync();
-        await RebuildViewAsync();
+        RebuildView();
     }
+
+    /// <summary>
+    /// Drag-to-reorder is only meaningful where the visible order is the stored order.
+    /// Today and Planned are sorted by date, and Important is a filtered subset of
+    /// "All", so reordering there would move items unpredictably.
+    /// </summary>
+    public bool CanReorderTasks =>
+        _selectedGroup is not null
+        || _selectedSmartView?.Kind is SmartViewKind.All or null;
 
     private async Task LoadSourceAsync()
     {
@@ -290,7 +310,7 @@ public class MainViewModel : ViewModelBase
             switch (_selectedSmartView?.Kind ?? SmartViewKind.All)
             {
                 case SmartViewKind.All:
-                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance));
+                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance, CurrentUserId));
                     CurrentViewTitle = "All";
                     break;
                 case SmartViewKind.Today:
@@ -302,7 +322,7 @@ public class MainViewModel : ViewModelBase
                     CurrentViewTitle = "Planned";
                     break;
                 case SmartViewKind.Important:
-                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance));
+                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance, CurrentUserId));
                     _sourceTasks = _sourceTasks.Where(t => t.LevelOfImportanceID == (int)TaskImportance.High).ToList();
                     CurrentViewTitle = "Important";
                     break;
@@ -312,7 +332,7 @@ public class MainViewModel : ViewModelBase
         if (_sourceTasks.Count > 0)
         {
             var sourceIds = _sourceTasks.Select(t => t.TaskID).ToList();
-            foreach (var extras in await TaskRepository.GetTaskListExtrasAsync(sourceIds))
+            foreach (var extras in await TaskRepository.GetTaskListExtrasAsync(sourceIds, CurrentUserId))
                 _sourceExtras[extras.TaskID] = extras;
         }
 
@@ -354,11 +374,13 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private int _refreshGeneration;
-
-    private Task RebuildViewAsync()
+    /// <summary>
+    /// Re-applies the client-side filters (search, completed, sort) to the already
+    /// loaded source data. Synchronous by design: it never touches the database, so
+    /// there is no window in which a second call could interleave.
+    /// </summary>
+    public void RebuildView()
     {
-        var generation = Interlocked.Increment(ref _refreshGeneration);
         _preservedSelectedTaskId = SelectedTask?.TaskID;
 
         IEnumerable<TodoTaskViewModel> source = _sourceViewModels;
@@ -377,13 +399,13 @@ public class MainViewModel : ViewModelBase
             : source.OrderBy(t => t.Ranking).ThenByDescending(t => t.LevelOfImportanceId);
 
         var viewModels = ordered.ToList();
-        var finalGeneration = Volatile.Read(ref _refreshGeneration);
-        if (generation != finalGeneration)
-            return Task.CompletedTask;
 
         Tasks.Clear();
         foreach (var viewModel in viewModels)
+        {
+            viewModel.CanReorder = CanReorderTasks;
             Tasks.Add(viewModel);
+        }
 
         SelectedTask = _preservedSelectedTaskId is int preservedId
             ? viewModels.FirstOrDefault(t => t.TaskID == preservedId)
@@ -391,7 +413,6 @@ public class MainViewModel : ViewModelBase
 
         CurrentViewSubtitle = $"{Tasks.Count} task{(Tasks.Count == 1 ? "" : "s")}";
         OnPropertyChanged(nameof(HasTasks));
-        return Task.CompletedTask;
     }
 
     private async Task RebuildViewDebouncedAsync(CancellationTokenSource cts)
@@ -408,7 +429,7 @@ public class MainViewModel : ViewModelBase
         if (cts.IsCancellationRequested || !ReferenceEquals(_searchDebounceCts, cts))
             return;
 
-        await RebuildViewAsync();
+        RebuildView();
     }
 
     private async Task AddTaskAsync()
@@ -486,13 +507,9 @@ public class MainViewModel : ViewModelBase
             task.DueDate = nextStart;
         task.EndDate = result.PlannedEndDate;
 
-        if (isCompleted && !ShowCompleted)
-        {
-            if (SelectedTask == task)
-                SelectedTask = null;
-            Tasks.Remove(task);
-        }
-
+        // Rebuild rather than just dropping the item: with "Show completed" off the
+        // task leaves the list, and the "N tasks" subtitle has to follow.
+        RebuildView();
         await RefreshCountsAsync();
 
         if (advancedTo is DateTime next)
@@ -505,6 +522,12 @@ public class MainViewModel : ViewModelBase
     {
         if (payload is null)
             return;
+
+        if (!CanReorderTasks)
+        {
+            RaiseToast("Tasks in this view are ordered by date or importance and cannot be reordered.");
+            return;
+        }
 
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
@@ -563,7 +586,7 @@ public class MainViewModel : ViewModelBase
             _sourceViewModels = sourceViewModelsSnapshot;
             for (var i = 0; i < _sourceTasks.Count; i++)
                 _sourceTasks[i].Ranking = i + 1;
-            await RebuildViewAsync();
+            RebuildView();
             throw;
         }
 
@@ -604,5 +627,35 @@ public class MainViewModel : ViewModelBase
             SelectedGroup = null;
             await RefreshSourceAndViewAsync();
         }
+    }
+
+    private async Task DeleteAccountAsync()
+    {
+        var managedGroups = Groups.Count(g => g.AdminID == CurrentUserId);
+        var groupWarning = managedGroups == 0
+            ? string.Empty
+            : managedGroups == 1
+                ? "\n\nYou administer 1 group. Deleting your account deletes that group and every task in it, including tasks created by other members."
+                : $"\n\nYou administer {managedGroups} groups. Deleting your account deletes those groups and every task in them, including tasks created by other members.";
+
+        if (!GroupDialogService.Confirmation.Confirm(
+                "Delete account",
+                $"Delete the account \"{User.UserName}\"?\n\nThis permanently deletes your tasks, groups, "
+                    + $"assignments, attachments and posts. It cannot be undone.{groupWarning}"))
+        {
+            return;
+        }
+
+        try
+        {
+            await UserRepository.DeleteUserAsync(CurrentUserId, CurrentUserId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            RaiseToast("You can only delete your own account.");
+            return;
+        }
+
+        SignOutRequested?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -155,11 +155,12 @@ public static class TaskRepository
         return rows.Count == 0 ? null : new TodoTask(rows[0]);
     }
 
-    public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance)
+    public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance, int actingUserId)
     {
         var procedure = byImportance ? "GetTaskParentsByImportance" : "GetTaskParentsByRanking";
         var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
@@ -192,17 +193,19 @@ public static class TaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<List<TodoTask>> GetTasksByIdsAsync(IReadOnlyList<int> taskIds)
+    public static async Task<List<TodoTask>> GetTasksByIdsAsync(IReadOnlyList<int> taskIds, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetTasksByIds", true,
-            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)));
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)),
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    public static async Task<List<TaskListExtras>> GetTaskListExtrasAsync(IReadOnlyList<int> taskIds)
+    public static async Task<List<TaskListExtras>> GetTaskListExtrasAsync(IReadOnlyList<int> taskIds, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetTaskListExtras", true,
-            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)));
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)),
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
 
         return rows.Select(r => new TaskListExtras(
             Convert.ToInt32(r["TaskID"]),
@@ -244,11 +247,12 @@ public static class TaskRepository
             GetString(taskRow, "OwnerColor") ?? string.Empty);
     }
 
-    public static async Task<TaskCounts> GetTaskCountsAsync(int userId, int actingUserId)
+    public static async Task<TaskCounts> GetTaskCountsAsync(int userId, int actingUserId, bool includeCompleted)
     {
         var rows = await SqlHelper.QueryAsync("GetTaskCounts", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId },
+            new SqlParameter("@IncludeCompleted", SqlDbType.Bit) { Value = includeCompleted });
 
         if (rows.Count == 0)
             return new TaskCounts(0, 0, 0, 0, 0, 0, 0, 0);
@@ -329,20 +333,6 @@ public static class TaskRepository
 
     public static async Task<List<LevelOfImportance>> GetImportanceLevelsAsync() =>
         (await GetLookupsAsync()).Levels;
-
-    public static async Task<int> CountParentTasksAsync(int userId, int? importanceLevelId = null)
-    {
-        var sql = "SELECT COUNT(*) FROM Tasks WHERE UserID = @UserID AND TaskParentID IS NULL AND TaskStatusID <> 3 AND GroupID IS NULL";
-        var parameters = new List<SqlParameter> { new("@UserID", SqlDbType.Int) { Value = userId } };
-        if (importanceLevelId.HasValue)
-        {
-            sql += " AND LevelOfImportanceID = @ImportanceLevelID";
-            parameters.Add(new SqlParameter("@ImportanceLevelID", SqlDbType.Int) { Value = importanceLevelId.Value });
-        }
-
-        var result = await SqlHelper.ScalarAsync(sql, parameters.ToArray());
-        return Convert.ToInt32(result);
-    }
 
     private static User ToLookupUser(DataRow row) =>
         new()
