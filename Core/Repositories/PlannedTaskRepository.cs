@@ -15,7 +15,6 @@ public enum PlannedScope
 
 public static class PlannedTaskRepository
 {
-    /// <summary>Creates a planned entry (tasks without a plan are not returned by the smart views).</summary>
     public static async Task<int> AddAsync(
         int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId, int actingUserId)
     {
@@ -54,7 +53,6 @@ public static class PlannedTaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    /// <summary>Rolls every past-due recurring plan forward to its next occurrence.</summary>
     public static async Task AutoUpdateAsync()
     {
         await SqlHelper.ExecuteAsync("AutoUpdatePlanneds", true);
@@ -75,9 +73,6 @@ public static class PlannedTaskRepository
         return rows.Select(r => new RepetitionType(r)).ToList();
     }
 
-    /// <summary>
-    /// Loads the planned smart view for <paramref name="userId"/> as full task rows.
-    /// </summary>
     public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope, int actingUserId)
     {
         var procedure = scope switch
@@ -95,11 +90,6 @@ public static class PlannedTaskRepository
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    /// <summary>
-    /// Counts visible (non-completed) planned tasks for a smart-view badge. Delegates to
-    /// GetTaskCounts so the counts always match the exact date-window/recurrence rules the
-    /// corresponding GetTasks* procedures use (the SQL is the single source of truth).
-    /// </summary>
     public static async Task<int> CountPlannedTasksAsync(int userId, PlannedScope scope, int actingUserId)
     {
         var counts = await TaskRepository.GetTaskCountsAsync(userId, actingUserId);

@@ -3,22 +3,6 @@ using Microsoft.Data.SqlClient;
 
 namespace Core.Data;
 
-/// <summary>
-/// Thin ADO.NET wrapper shared by all repositories. Executes parameterized commands
-/// (stored procedures or text) over a short-lived connection and never string-concatenates SQL.
-///
-/// It also:
-///  - validates that string/byte values fit their declared parameter size up-front
-///    (so truncation can never silently corrupt data),
-///  - supports table-valued parameters,
-///  - reads the stored procedure's NewID column (the first column of its first row,
-///    produced by "SELECT ... AS NewID") via ExecuteProcReturnAsync,
-///  - reads multiple result sets via QueryMultipleAsync,
-///  - translates the canonical server THROW codes into typed .NET exceptions:
-///       50001 -> UnauthorizedAccessException   (permission / authorization denied)
-///       50002/50003/50004 -> InvalidOperationException (not found / invalid / not owner)
-///       2601/2627 -> InvalidOperationException (duplicate key)
-/// </summary>
 internal static class SqlHelper
 {
     private static async Task<T> ExecuteCoreAsync<T>(
@@ -73,10 +57,6 @@ internal static class SqlHelper
         await ExecuteCoreAsync<int>(sql, storedProcedure, parameters, static command =>
             command.ExecuteNonQueryAsync());
 
-    /// <summary>
-    /// Executes a stored procedure and returns the first column of the first row of its
-    /// result set (the NewID column emitted by "SELECT ... AS NewID").
-    /// </summary>
     public static async Task<int?> ExecuteProcReturnAsync(string procedure, params SqlParameter[] parameters)
     {
         var value = await ExecuteCoreAsync<object?>(procedure, true, parameters,
@@ -84,11 +64,6 @@ internal static class SqlHelper
         return value is null || value is DBNull ? (int?)null : Convert.ToInt32(value);
     }
 
-    /// <summary>
-    /// Runs a stored procedure whose result set is consumed one page at a time.
-    /// Calling ReadAsync repeatedly walks successive result sets; call
-    /// <see cref="MultiResultReader.ReadAsync"/> until it returns null.
-    /// </summary>
     public static async Task<MultiResultReader> QueryMultipleAsync(string procedure, params SqlParameter[] parameters)
     {
         EnsureValidParameters(parameters);
@@ -116,7 +91,6 @@ internal static class SqlHelper
         }
     }
 
-    /* ------------------------- Table-valued parameters ------------------------- */
 
     public static DataTable BuildTaskIdTable(IReadOnlyList<int> taskIds)
     {
@@ -149,7 +123,6 @@ internal static class SqlHelper
             Value = table
         };
 
-    /* ----------------------------- Validation ----------------------------- */
 
     private static void EnsureValidParameters(SqlParameter[] parameters)
     {
@@ -174,7 +147,6 @@ internal static class SqlHelper
         }
     }
 
-    /* --------------------------- Exception mapping --------------------------- */
 
     private static Exception Translate(SqlException exception)
     {
@@ -182,12 +154,12 @@ internal static class SqlHelper
         {
             case 50001:
                 return new UnauthorizedAccessException(exception.Message, exception);
-            case 50002: // not found / invalid state
-            case 50003: // invalid input
-            case 50004: // not owner / administrator
+            case 50002:
+            case 50003:
+            case 50004:
                 return new InvalidOperationException(exception.Message, exception);
             case 2601:
-            case 2627: // unique constraint
+            case 2627:
                 return new InvalidOperationException("That record already exists.", exception);
             default:
                 return exception;
@@ -195,10 +167,6 @@ internal static class SqlHelper
     }
 }
 
-/// <summary>
-/// Sequential reader over a stored procedure producing several result sets.
-/// Owns the underlying connection/command; dispose with <see cref="DisposeAsync"/>.
-/// </summary>
 public sealed class MultiResultReader : IAsyncDisposable
 {
     private readonly SqlConnection _connection;
@@ -213,14 +181,6 @@ public sealed class MultiResultReader : IAsyncDisposable
         _reader = reader;
     }
 
-    /// <summary>
-    /// Loads the next result set into a DataTable, or returns null when exhausted.
-    /// </summary>
-    /// <remarks>
-    /// The rows are copied manually instead of using <see cref="DataTable.Load(System.Data.IDataReader)"/>:
-    /// Load silently advances past an intermediate result set when a stored procedure returns more
-    /// than two result sets, which would silently reorder the pages consumed by callers.
-    /// </remarks>
     public async Task<DataTable?> ReadAsync()
     {
         if (_started)

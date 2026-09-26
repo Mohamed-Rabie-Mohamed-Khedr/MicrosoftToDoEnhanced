@@ -3,11 +3,6 @@ using System.IO;
 
 namespace MicrosoftToDoEnhanced.Services;
 
-/// <summary>
-/// Single, dependency-free logger used by every code path where an exception must not be
-/// silently swallowed. Writes to %LOCALAPPDATA%\MicrosoftToDoEnhanced\logs\app.log and
-/// surfaces unexpected errors through <see cref="ErrorReported"/> so the window can toast them.
-/// </summary>
 public static class AppLogger
 {
     private static readonly object Gate = new();
@@ -33,7 +28,6 @@ public static class AppLogger
         }
         catch
         {
-            // Writing a log must never crash the application.
         }
     }
 

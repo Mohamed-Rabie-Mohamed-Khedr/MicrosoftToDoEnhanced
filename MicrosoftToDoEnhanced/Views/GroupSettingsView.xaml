@@ -11,12 +11,6 @@
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
 
-    <!-- Placeholder bindings (DataContext = group settings VM):
-         GroupName, GroupDescription, Color, ColorChoices,
-         Members (ObservableCollection), NewMemberEmail, AddMemberCommand, RemoveMemberCommand,
-         IsOwner, DeleteGroupCommand, SaveGroupCommand, CloseCommand,
-         Posts (ObservableCollection), NewPostContent, AddPostCommand, LoadMorePostsCommand, HasMorePosts
-    -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -24,7 +18,6 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ===== Header ===== -->
         <Grid Grid.Row="0" Margin="20,16,20,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -46,11 +39,9 @@
             </Button>
         </Grid>
 
-        <!-- ===== Body ===== -->
         <ScrollViewer Grid.Row="1" Padding="20,0,20,8">
             <StackPanel>
 
-                <!-- General -->
                 <TextBlock Text="GENERAL" Style="{StaticResource CaptionTextStyle}" FontWeight="SemiBold" Margin="0,4,0,8"/>
                 <Border Style="{StaticResource CardStyle}" Padding="16">
                     <StackPanel>
@@ -94,7 +85,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Members -->
                 <TextBlock Text="MEMBERS" Style="{StaticResource CaptionTextStyle}" FontWeight="SemiBold" Margin="0,20,0,8"/>
                 <Border Style="{StaticResource CardStyle}" Padding="12">
                     <StackPanel>
@@ -136,7 +126,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Invite -->
                         <Grid Margin="4,8,4,2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -149,12 +138,12 @@
                                        Visibility="{Binding NewMemberEmail, Converter={StaticResource NullToVisibilityConverter}}"/>
                             <Button Grid.Column="1" Style="{StaticResource SecondaryButtonStyle}" Margin="8,0,0,0"
                                     MinHeight="36" Content="Add"
+                                    IsEnabled="{Binding IsOwner}"
                                     Command="{Binding AddMemberCommand}"/>
                         </Grid>
                     </StackPanel>
                 </Border>
 
-                <!-- Posts feed -->
                 <TextBlock Text="ACTIVITY FEED" Style="{StaticResource CaptionTextStyle}" FontWeight="SemiBold" Margin="0,20,0,8"/>
                 <Border Style="{StaticResource CardStyle}" Padding="12">
                     <StackPanel>
@@ -192,13 +181,11 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Pagination -->
                         <Button Style="{StaticResource SecondaryButtonStyle}" MinHeight="30"
                                 HorizontalAlignment="Stretch" Content="Load 10 more"
                                 Visibility="{Binding HasMorePosts, Converter={StaticResource BoolToVisibilityConverter}}"
                                 Command="{Binding LoadMorePostsCommand}"/>
 
-                        <!-- New post -->
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -220,7 +207,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Danger zone -->
                 <Border Margin="0,20,0,4" Padding="16" CornerRadius="{StaticResource CardCornerRadius}"
                         BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
                         Background="Transparent"
@@ -238,7 +224,6 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ===== Footer ===== -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="20,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource SecondaryButtonStyle}" Content="Cancel" Margin="0,0,10,0"

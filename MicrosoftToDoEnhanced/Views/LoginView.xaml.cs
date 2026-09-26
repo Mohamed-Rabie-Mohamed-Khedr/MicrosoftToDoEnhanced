@@ -11,13 +11,6 @@ using MicrosoftToDoEnhanced.ViewModels;
 
 namespace MicrosoftToDoEnhanced.Views;
 
-/// <summary>
-/// Sign-in / registration window. All validation, hashing and repository work lives in
-/// <see cref="LoginViewModel"/>. Code-behind only carries UI plumbing: it attaches the
-/// view-model, pushes PasswordBox contents into it with a typed cast (WPF PasswordBoxes
-/// cannot bind), forwards the accent swatch gesture to the view-model, reacts to the
-/// selected accent (theme preview) and navigates to MainWindow after a successful sign-in.
-/// </summary>
 public partial class LoginView : Window
 {
     public LoginView()
@@ -34,12 +27,14 @@ public partial class LoginView : Window
             && sender is LoginViewModel viewModel)
             ThemeManager.ApplyAccentColor(viewModel.SelectedAccentHex);
 
-        // When the VM clears the credential after a sign-in attempt, wipe the PasswordBox
-        // too so the raw password never lingers in tree (PasswordBoxes cannot bind).
-        if (e.PropertyName == nameof(LoginViewModel.LoginPassword)
-            && sender is LoginViewModel loginViewModel
-            && loginViewModel.LoginPassword is null)
+        if (sender is not LoginViewModel model)
+            return;
+
+        if (e.PropertyName == nameof(LoginViewModel.LoginPassword) && model.LoginPassword is null)
             LoginPasswordBox.Password = string.Empty;
+
+        if (e.PropertyName == nameof(LoginViewModel.RegisterPassword) && model.RegisterPassword is null)
+            RegisterPasswordBox.Password = string.Empty;
     }
 
     private void OnLoginPasswordChanged(object sender, RoutedEventArgs e)
@@ -69,12 +64,6 @@ public partial class LoginView : Window
     }
 }
 
-/// <summary>
-/// Sign-in / registration view-model for LoginView. All validation and authentication work
-/// goes through <see cref="UserRepository.SignInAsync"/> and
-/// <see cref="UserRepository.RegisterAsync"/>; the view pushes PasswordBox contents in
-/// because WPF PasswordBoxes cannot bind.
-/// </summary>
 public sealed class LoginViewModel : ViewModelBase
 {
     private readonly Action<User> _onAuthenticated;
@@ -120,11 +109,6 @@ public sealed class LoginViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Fed from the PasswordBox by the view. Cleared after every sign-in attempt so a
-    /// credential never lingers on the VM (the view clears its PasswordBox copy in the
-    /// same PropertyChanged cycle).
-    /// </summary>
     public string? LoginPassword
     {
         get => _loginPassword;
@@ -173,14 +157,12 @@ public sealed class LoginViewModel : ViewModelBase
         set => SetProperty(ref _selectedAccentHex, value);
     }
 
-    /// <summary>true shows the register panel, false shows the sign-in panel.</summary>
     public bool IsRegisterMode
     {
         get => _isRegisterMode;
         set => SetProperty(ref _isRegisterMode, value);
     }
 
-    /// <summary>True while a sign-in/registration is in flight; keeps the buttons disabled.</summary>
     public bool IsBusy
     {
         get => _isBusy;
@@ -193,7 +175,6 @@ public sealed class LoginViewModel : ViewModelBase
         private set => SetProperty(ref _loginError, value);
     }
 
-    /// <summary>Neutral/success hint in the sign-in card (e.g. after a fresh registration).</summary>
     public string? LoginInfoMessage
     {
         get => _loginInfoMessage;
@@ -258,8 +239,6 @@ public sealed class LoginViewModel : ViewModelBase
 
             var result = await UserRepository.SignInAsync(LoginUserName, LoginPassword ?? string.Empty);
 
-            // Never retain the credential after an attempt, success or failure. Clearing it
-            // here also triggers the view hook that wipes its PasswordBox copy.
             LoginPassword = null;
 
             if (!result.Success)

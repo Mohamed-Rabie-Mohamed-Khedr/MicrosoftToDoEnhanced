@@ -6,15 +6,6 @@
              mc:Ignorable="d"
              d:DesignHeight="72" d:DesignWidth="480">
 
-    <!--
-        Reusable task row. Bind to a task view-model exposing (placeholder names):
-          TaskName, IsCompleted, StatusName ("Pending"/"Incomplete"/"Completed"),
-          LevelName ("Low"/"Medium"/"High"), LevelColor, Color,
-          DueDate (DateTime?), Subtasks (ObservableCollection), HasAttachments,
-          AssignedToName, AssignedToColor, RecurrenceName
-        Commands (on the parent view-model, resolved via ElementName=ItemRoot):
-          ToggleTaskStatusCommand (parameter = task), SelectTaskCommand (parameter = task)
-    -->
     <Border x:Name="Root"
             Padding="12,10"
             Margin="0,0,0,8"
@@ -49,22 +40,20 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>   <!-- drag grip -->
-                <ColumnDefinition Width="Auto"/>   <!-- status checkbox -->
-                <ColumnDefinition Width="3"/>      <!-- color tag bar -->
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="3"/>
                 <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>      <!-- title / meta -->
-                <ColumnDefinition Width="Auto"/>   <!-- priority + assignee -->
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Drag grip: start manual drag from here -->
             <Grid x:Name="DragGrip" Grid.Column="0" Width="16" VerticalAlignment="Center" Margin="-4,0,4,0"
                   Cursor="SizeAll" ToolTip="Drag to reorder">
                 <Path Width="8" Height="14" Stretch="Uniform" Fill="{DynamicResource TextTertiaryBrush}"
                       Data="M0,0 h2 v2 h-2 Z M4,0 h2 v2 h-2 Z M0,4 h2 v2 h-2 Z M4,4 h2 v2 h-2 Z M0,8 h2 v2 h-2 Z M4,8 h2 v2 h-2 Z"/>
             </Grid>
 
-            <!-- Completion checkbox (circle style) -->
             <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
                       IsChecked="{Binding IsCompleted, Mode=TwoWay}"
                       Command="{Binding DataContext.ToggleTaskStatusCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
@@ -107,11 +96,9 @@
                 </CheckBox.Template>
             </CheckBox>
 
-            <!-- Personal color tag bar -->
             <Border Grid.Column="2" CornerRadius="1.5" VerticalAlignment="Stretch"
                     Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
 
-            <!-- Title + meta row -->
             <StackPanel Grid.Column="4" VerticalAlignment="Center">
                 <TextBlock FontSize="13.5" Foreground="{DynamicResource TextPrimaryBrush}"
                            TextTrimming="CharacterEllipsis" Text="{Binding TaskName}">
@@ -128,7 +115,6 @@
                 </TextBlock>
 
                 <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                    <!-- Due date chip -->
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding DueDate, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}">
                         <Path Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center"
@@ -138,7 +124,6 @@
                                    Text="{Binding DueDate, StringFormat='ddd, MMM d'}"/>
                     </StackPanel>
 
-                    <!-- Recurrence chip -->
                     <StackPanel Orientation="Horizontal"
                                 Visibility="{Binding RecurrenceName, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}">
                         <Path Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center"
@@ -148,18 +133,15 @@
                                    Text="{Binding RecurrenceName}"/>
                     </StackPanel>
 
-                    <!-- Steps progress -->
                     <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="0,0,10,0"
                                Visibility="{Binding StepsSummary, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"
                                Text="{Binding StepsSummary}"/>
 
-                    <!-- Attachment icon -->
                     <Path Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0"
                           Fill="{DynamicResource TextTertiaryBrush}"
                           Visibility="{Binding HasAttachments, Converter={StaticResource BoolToVisibilityConverter}}"
                           Data="M8,0 L2,0 L2,10 L10,10 L10,2 Z M7.5,1 L9,2.5 L7.5,2.5 Z M3,7.5 L6,4.5 L7,5.5 L8.5,4 L10,5.5 L10,9 L2,9 L2,8 Z"/>
 
-                    <!-- Status pill (only for non-completed, since completed reads from the strikethrough) -->
                     <Border Margin="0,0,4,0"
                             Visibility="{Binding IsCompleted, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                         <Border.Style>
@@ -189,7 +171,6 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Priority pill + assignee avatar -->
             <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                 <Border Margin="0,0,10,0">
                     <Border.Style>
@@ -242,7 +223,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Assignee avatar chip -->
                 <Grid Width="26" Height="26" ToolTip="{Binding AssignedToName, StringFormat=Assigned to {0}}"
                       Visibility="{Binding AssignedToName, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}">
                     <Ellipse Fill="{Binding AssignedToColor, Converter={StaticResource HexToBrushConverter}}"/>

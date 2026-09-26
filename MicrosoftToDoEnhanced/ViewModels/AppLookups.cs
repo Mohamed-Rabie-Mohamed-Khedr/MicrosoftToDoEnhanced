@@ -2,11 +2,6 @@ using Core.Repositories;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
-/// <summary>
-/// Cache of the small lookup tables every task row needs (status/level names, possible
-/// assignees, recurrence options). Loaded once and reused so repeated refreshes never
-/// re-query the same static data.
-/// </summary>
 public sealed class AppLookups
 {
     public Dictionary<int, string> StatusNames { get; } = new();

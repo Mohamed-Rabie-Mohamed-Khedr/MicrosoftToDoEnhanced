@@ -6,7 +6,6 @@ namespace Core.Repositories;
 
 public static class GroupRepository
 {
-    /// <summary>Creates a group owned by <paramref name="adminId"/>. Returns the new GroupID.</summary>
     public static async Task<int> AddGroupAsync(int adminId, string groupName, string? description, string color)
     {
         var groupId = await SqlHelper.ExecuteProcReturnAsync("AddGroup",
@@ -24,7 +23,6 @@ public static class GroupRepository
         return groupId ?? throw new InvalidOperationException("The group could not be created.");
     }
 
-    /// <summary>Edits a group. Only the group owner may do this (server THROW 50004).</summary>
     public static async Task UpdateGroupAsync(
         int groupId, int actingUserId, string groupName, string? description, string color)
     {
@@ -49,18 +47,15 @@ public static class GroupRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<Group?> GetGroupAsync(int groupId)
+    public static async Task<Group?> GetGroupAsync(int groupId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync(
-            "SELECT * FROM Groups WHERE GroupID = @GroupID", false,
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId });
+            "GetGroup", true,
+            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
         return rows.Count == 0 ? null : new Group(rows[0]);
     }
 
-    /// <summary>
-    /// Groups the current user administers or is a member of.
-    /// Not exposed by a stored procedure, so a parameterized query is used.
-    /// </summary>
     public static async Task<List<Group>> GetGroupsForUserAsync(int userId)
     {
         var rows = await SqlHelper.QueryAsync(
@@ -75,7 +70,6 @@ public static class GroupRepository
         return rows.Select(r => new Group(r)).ToList();
     }
 
-    /// <summary>Adds a user to the group. Only the group owner may do this (server THROW 50001).</summary>
     public static async Task AddGroupMemberAsync(int groupId, int userId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("AddGroupMember", true,
@@ -92,9 +86,6 @@ public static class GroupRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    /// <summary>
-    /// Members include the group admin plus everyone in GroupMembers.
-    /// </summary>
     public static async Task<List<User>> GetGroupMembersAsync(int groupId)
     {
         var rows = await SqlHelper.QueryAsync(

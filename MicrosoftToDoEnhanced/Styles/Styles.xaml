@@ -2,9 +2,6 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
-    <!-- ================================================= -->
-    <!--  Geometry / shared bits                           -->
-    <!-- ================================================= -->
     <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
     <CornerRadius x:Key="CardCornerRadius">10</CornerRadius>
     <sys:Double x:Key="ControlHeight">36</sys:Double>
@@ -12,9 +9,6 @@
     <DropShadowEffect x:Key="CardShadow" BlurRadius="16" ShadowDepth="2" Opacity="0.14" Color="#000000" Direction="270" RenderingBias="Quality"/>
     <DropShadowEffect x:Key="PopupShadow" BlurRadius="28" ShadowDepth="6" Opacity="0.22" Color="#000000" Direction="270" RenderingBias="Quality"/>
 
-    <!-- ================================================= -->
-    <!--  Typography (FontFamily inherited from Window)    -->
-    <!-- ================================================= -->
     <Style x:Key="PageTitleTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="24"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -52,9 +46,6 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  Buttons                                          -->
-    <!-- ================================================= -->
     <Style x:Key="IconButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="32"/>
@@ -169,9 +160,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  TextBox                                          -->
-    <!-- ================================================= -->
     <Style x:Key="ModernTextBoxStyle" TargetType="TextBox">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}"/>
         <Setter Property="Padding" Value="12,0"/>
@@ -227,9 +215,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  PasswordBox                                      -->
-    <!-- ================================================= -->
     <Style x:Key="ModernPasswordBoxStyle" TargetType="PasswordBox">
         <Setter Property="MinHeight" Value="{StaticResource ControlHeight}"/>
         <Setter Property="Padding" Value="12,0"/>
@@ -261,9 +246,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  ComboBox                                         -->
-    <!-- ================================================= -->
     <Style x:Key="ModernComboBoxToggleStyle" TargetType="ToggleButton">
         <Setter Property="Template">
             <Setter.Value>
@@ -365,9 +347,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  DatePicker (light restyle)                       -->
-    <!-- ================================================= -->
     <Style x:Key="ModernDatePickerTextBoxStyle" TargetType="DatePickerTextBox">
         <Setter Property="Padding" Value="8,0"/>
         <Setter Property="FontSize" Value="13"/>
@@ -428,9 +407,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  CheckBox (accent square w/ check)                -->
-    <!-- ================================================= -->
     <Style x:Key="AccentCheckBoxStyle" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="FontSize" Value="13"/>
@@ -485,9 +461,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  ListBox (fluent, animated items)                 -->
-    <!-- ================================================= -->
     <Style x:Key="FluentListBoxItemStyle" TargetType="ListBoxItem">
         <Setter Property="Padding" Value="10,8"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -530,9 +503,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  Cards                                            -->
-    <!-- ================================================= -->
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
@@ -542,18 +512,12 @@
         <Setter Property="Padding" Value="16"/>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  Badges / pills                                   -->
-    <!-- ================================================= -->
     <Style x:Key="BadgeStyle" TargetType="Border">
         <Setter Property="CornerRadius" Value="10"/>
         <Setter Property="Padding" Value="8,2"/>
         <Setter Property="Background" Value="{DynamicResource ChipBackgroundBrush}"/>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  ScrollBars                                       -->
-    <!-- ================================================= -->
     <Style x:Key="FluentScrollBarThumbStyle" TargetType="Thumb">
         <Setter Property="Template">
             <Setter.Value>
@@ -593,9 +557,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  Tooltip                                          -->
-    <!-- ================================================= -->
     <Style TargetType="ToolTip">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -614,9 +575,6 @@
         </Setter>
     </Style>
 
-    <!-- ================================================= -->
-    <!--  Toggle switch (theme / settings)                 -->
-    <!-- ================================================= -->
     <Style x:Key="ToggleSwitchStyle" TargetType="ToggleButton">
         <Setter Property="Width" Value="44"/>
         <Setter Property="Height" Value="24"/>

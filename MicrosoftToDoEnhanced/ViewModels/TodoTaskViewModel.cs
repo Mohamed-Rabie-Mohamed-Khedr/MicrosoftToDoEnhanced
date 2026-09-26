@@ -6,11 +6,6 @@ using Microsoft.Win32;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
-/// <summary>
-/// View-model for one TodoTask row. Satisfies the placeholder contract of both
-/// TaskItem.xaml (list rows) and TaskDetailPanel.xaml (detail editor).
-/// Details (steps, attachments, planned, assignee) are loaded once per instance.
-/// </summary>
 public class TodoTaskViewModel : ViewModelBase
 {
     private readonly MainViewModel _owner;
@@ -88,7 +83,6 @@ public class TodoTaskViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Steps in the detail panel bind to Title; list rows bind to TaskName.</summary>
     public string Title => TaskName;
 
     public string Color
@@ -229,9 +223,6 @@ public class TodoTaskViewModel : ViewModelBase
     public ICommand DeleteTaskCommand { get; }
     public ICommand SaveTaskCommand { get; }
 
-    /// <summary>
-    /// Populates the richer data shown in the detail panel. Called once per task VM.
-    /// </summary>
     public async Task LoadDetailsAsync()
     {
         if (_detailsLoaded)
@@ -246,7 +237,6 @@ public class TodoTaskViewModel : ViewModelBase
         await LoadAssignedAsync();
     }
 
-    /// <summary>Applies planned scheduling (due/end/recurrence) onto the view-model.</summary>
     public void ApplyPlanned(PlannedTask? planned)
     {
         if (planned is null)
@@ -262,11 +252,6 @@ public class TodoTaskViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Applies the row-level aggregates returned by GetTaskListExtras (substeps, attachment
-    /// presence, due dates, recurrence, assignee) so list rows render fully without opening
-    /// the detail panel. Details are loaded lazily when the task becomes the SelectedTask.
-    /// </summary>
     public void ApplyListExtras(TaskListExtras extras)
     {
         StepsSummary = extras.SubtaskCount > 0
@@ -369,10 +354,30 @@ public class TodoTaskViewModel : ViewModelBase
         if (step is null)
             return;
 
-        await TaskRepository.UpdateTaskStatusAsync(
-            step.TaskID,
-            step.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete,
-            _owner.CurrentUserId);
+        var requested = step.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete;
+        var priorIsCompleted = !step.IsCompleted;
+
+        TaskStatusResult result;
+        try
+        {
+            result = await TaskRepository.UpdateTaskStatusAsync(
+                step.TaskID, requested, _owner.CurrentUserId);
+        }
+        catch
+        {
+            step.IsCompleted = priorIsCompleted;
+            throw;
+        }
+
+        if (result.StatusForced)
+        {
+            step.IsCompleted = priorIsCompleted;
+            _owner.RaiseToast("The step could not be changed as requested.");
+            return;
+        }
+
+        step.IsCompleted = result.TaskStatusID == (int)TaskState.Completed;
+
         UpdateStepsSummary();
         _owner.RaiseToast(step.IsCompleted ? "Step completed" : "Step marked incomplete");
         await _owner.RefreshCountsOnlyAsync();

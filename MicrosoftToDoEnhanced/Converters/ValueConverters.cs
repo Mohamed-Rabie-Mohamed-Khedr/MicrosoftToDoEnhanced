@@ -5,10 +5,6 @@ using System.Windows.Media;
 
 namespace MicrosoftToDoEnhanced.Converters;
 
-/// <summary>
-/// Converts a hex color string ("#RRGGBB") into a SolidColorBrush.
-/// Returns a neutral brush when the input is null/invalid.
-/// </summary>
 public class HexToBrushConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -20,7 +16,7 @@ public class HexToBrushConverter : IValueConverter
                 var color = (Color)ColorConverter.ConvertFromString(hex);
                 return new SolidColorBrush(color);
             }
-            catch { /* fall through to default */ }
+            catch {  }
         }
         return Application.Current.TryFindResource("TextTertiaryBrush") ?? Brushes.Gray;
     }
@@ -33,9 +29,6 @@ public class HexToBrushConverter : IValueConverter
     }
 }
 
-/// <summary>
-/// Inverts a boolean. Used to show/hide panels depending on selection state.
-/// </summary>
 public class InverseBoolConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -45,9 +38,6 @@ public class InverseBoolConverter : IValueConverter
         value is bool b ? !b : Binding.DoNothing;
 }
 
-/// <summary>
-/// true -> Visible, false -> Collapsed.
-/// </summary>
 public class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -57,9 +47,6 @@ public class BoolToVisibilityConverter : IValueConverter
         value is Visibility v ? v == Visibility.Visible : Binding.DoNothing;
 }
 
-/// <summary>
-/// false -> Visible, true -> Collapsed.
-/// </summary>
 public class InverseBoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -69,9 +56,6 @@ public class InverseBoolToVisibilityConverter : IValueConverter
         value is Visibility v ? v != Visibility.Visible : Binding.DoNothing;
 }
 
-/// <summary>
-/// null/false/empty -> Visible; otherwise Collapsed. Pass "Invert" as parameter to invert.
-/// </summary>
 public class NullToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -91,9 +75,6 @@ public class NullToVisibilityConverter : IValueConverter
         Binding.DoNothing;
 }
 
-/// <summary>
-/// Returns a friendly relative timestamp ("Just now", "5 min ago", "Yesterday", date).
-/// </summary>
 public class RelativeDateConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -112,10 +93,6 @@ public class RelativeDateConverter : IValueConverter
         Binding.DoNothing;
 }
 
-/// <summary>
-/// Builds a compact attachment size label: "invoice.pdf · 245 KB".
-/// Parameter "SizeOnly" returns just the formatted size.
-/// </summary>
 public class FileSizeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -130,9 +107,6 @@ public class FileSizeConverter : IValueConverter
         Binding.DoNothing;
 }
 
-/// <summary>
-/// Extracts initials (max 2 chars) from a display name for avatar circles.
-/// </summary>
 public class InitialsConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

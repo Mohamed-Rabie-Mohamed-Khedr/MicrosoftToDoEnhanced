@@ -10,13 +10,6 @@ namespace MicrosoftToDoEnhanced.ViewModels;
 
 public sealed record ReorderPayload(TodoTaskViewModel Dragged, TodoTaskViewModel Target);
 
-/// <summary>
-/// DataContext of MainWindow. Satisfies the placeholder bindings listed in
-/// MainWindow.xaml (CurrentUser, SmartViews, Groups, Tasks, SelectedTask,
-/// NewTaskTitle, AddTaskCommand, SortByImportance, ShowCompleted, SearchText,
-/// OpenGroupSettingsCommand, CreateGroupCommand, SignOutCommand, ...).
-/// Never touches SqlConnection/SqlCommand directly - it only talks to Core repositories.
-/// </summary>
 public class MainViewModel : ViewModelBase
 {
     private readonly Window _window;
@@ -144,8 +137,6 @@ public class MainViewModel : ViewModelBase
             {
                 OnPropertyChanged(nameof(IsDetailOpen));
 
-                // Load steps/attachments/assignees lazily, only when this task is shown.
-                // The VM guards against double-loading (details are cached per instance).
                 if (value is not null)
                     value.LoadDetailsAsync().SafeFireAndForget();
             }
@@ -183,7 +174,6 @@ public class MainViewModel : ViewModelBase
             if (!SetProperty(ref _searchText, value))
                 return;
 
-            // Debounce: only re-filter after the user pauses typing.
             _searchDebounceCts?.Cancel();
             var cts = new CancellationTokenSource();
             _searchDebounceCts = cts;
@@ -319,8 +309,6 @@ public class MainViewModel : ViewModelBase
             }
         }
 
-        // One round trip for the row-level aggregates (substeps, attachments, due dates,
-        // recurrence, assignee) so the list renders fully without per-task detail calls.
         if (_sourceTasks.Count > 0)
         {
             var sourceIds = _sourceTasks.Select(t => t.TaskID).ToList();
@@ -331,10 +319,6 @@ public class MainViewModel : ViewModelBase
         BuildSourceViewModels();
     }
 
-    /// <summary>
-    /// Builds the TodoTaskViewModels once per source load. <see cref="RebuildViewAsync"/>
-    /// only filters/sorts this list in memory, so search/filter/sort never re-query.
-    /// </summary>
     private void BuildSourceViewModels()
     {
         var built = new List<TodoTaskViewModel>(_sourceTasks.Count);
@@ -372,11 +356,6 @@ public class MainViewModel : ViewModelBase
 
     private int _refreshGeneration;
 
-    /// <summary>
-    /// In-memory filter/sort over the already-built <see cref="_sourceViewModels"/>.
-    /// No repository calls and no per-task fan-out: view-models are built once per source
-    /// load, and details load lazily when a task is selected.
-    /// </summary>
     private Task RebuildViewAsync()
     {
         var generation = Interlocked.Increment(ref _refreshGeneration);
@@ -441,8 +420,6 @@ public class MainViewModel : ViewModelBase
         var groupId = _selectedGroup?.GroupID;
         var smartView = _selectedSmartView?.Kind ?? SmartViewKind.All;
 
-        // Context-aware defaults: Important -> High; planned views -> due today; group or
-        // AssignedToMe -> plain personal task below.
         var importance = smartView == SmartViewKind.Important
             ? (int)TaskImportance.High
             : (int)TaskImportance.Medium;
@@ -476,8 +453,6 @@ public class MainViewModel : ViewModelBase
 
         var requested = task.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete;
         var priorDueDate = task.DueDate;
-        // The checkbox's TwoWay binding has already flipped IsCompleted before this command
-        // runs, so the pre-click UI state is the inverse of what we see now.
         var priorIsCompleted = !task.IsCompleted;
 
         TaskStatusResult result;
@@ -487,22 +462,19 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Undo the optimistic checkbox flip (the setter also restores the underlying
-            // _model.TaskStatusID), then rethrow so the central AsyncRelayCommand handler
-            // surfaces the failure as a toast.
             task.IsCompleted = priorIsCompleted;
             throw;
         }
 
-        // The server may have refused/forced a different state (e.g. back to Pending).
-        if (result.TaskStatusID != requested)
+        if (result.StatusForced)
         {
             task.IsCompleted = priorIsCompleted;
             RaiseToast("The task could not be changed as requested.");
             return;
         }
 
-        task.IsCompleted = result.TaskStatusID == (int)TaskState.Completed;
+        var isCompleted = result.TaskStatusID == (int)TaskState.Completed;
+        task.IsCompleted = isCompleted;
 
         DateTime? advancedTo = requested == (int)TaskState.Completed
             && result.PlannedStartDate is DateTime nextOccurrence
@@ -514,7 +486,7 @@ public class MainViewModel : ViewModelBase
             task.DueDate = nextStart;
         task.EndDate = result.PlannedEndDate;
 
-        if (requested == (int)TaskState.Completed && !ShowCompleted)
+        if (isCompleted && !ShowCompleted)
         {
             if (SelectedTask == task)
                 SelectedTask = null;
@@ -553,8 +525,6 @@ public class MainViewModel : ViewModelBase
         if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex)
             return;
 
-        // Resolve the source-side indices BEFORE any mutation, so a guard can never leave a
-        // half-applied reorder behind.
         var fullFrom = _sourceTasks.FindIndex(t => t.TaskID == dragged.TaskID);
         var insertAt = _sourceTasks.FindIndex(t => t.TaskID == target.TaskID);
         if (fullFrom < 0 || insertAt < 0)
@@ -563,7 +533,6 @@ public class MainViewModel : ViewModelBase
         var draggedTask = _sourceTasks[fullFrom];
         var draggedViewModel = _sourceViewModels[fullFrom];
 
-        // Snapshot the original order so a failed persistence can be rolled back exactly.
         var sourceTasksSnapshot = _sourceTasks.ToList();
         var sourceViewModelsSnapshot = _sourceViewModels.ToList();
 
@@ -576,7 +545,7 @@ public class MainViewModel : ViewModelBase
             _sourceViewModels.RemoveAt(fullFrom);
 
             if (fullFrom < insertAt)
-                insertAt--; // the removal shifted the target down one index
+                insertAt--;
 
             _sourceTasks.Insert(insertAt, draggedTask);
             _sourceViewModels.Insert(insertAt, draggedViewModel);
@@ -590,8 +559,6 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Undo the optimistic reorder from the cached source order, then rethrow so the
-            // central AsyncRelayCommand handler surfaces the failure as a toast.
             _sourceTasks = sourceTasksSnapshot;
             _sourceViewModels = sourceViewModelsSnapshot;
             for (var i = 0; i < _sourceTasks.Count; i++)

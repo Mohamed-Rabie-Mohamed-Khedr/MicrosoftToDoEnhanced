@@ -13,18 +13,6 @@
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
 
-    <!--
-        Placeholder bindings (DataContext = main VM):
-          CurrentUser (ShowName, UserEmail, Color, IsAdmin)
-          SmartViews (collection of { Name, Color, Count }), SelectedSmartView
-          Groups, SelectedGroup
-          Tasks, SelectedTask, IsDetailOpen, HasTasks
-          NewTaskTitle, AddTaskCommand
-          SortByImportance (bool), ShowCompleted (bool)
-          SearchText
-          OpenGroupSettingsCommand, CreateGroupCommand, SignOutCommand
-          CurrentViewTitle, CurrentViewSubtitle
-    -->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="280" MinWidth="220" MaxWidth="360"/>
@@ -33,7 +21,6 @@
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ================= LEFT SIDEBAR ================= -->
         <Border Grid.Column="0" Background="{DynamicResource SidebarBackgroundBrush}"
                 BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
             <Grid>
@@ -45,7 +32,6 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- App brand + theme toggle -->
                 <Grid Grid.Row="0" Margin="16,16,12,8">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource AccentBrush}">
@@ -61,7 +47,6 @@
                                   Checked="OnThemeToggled" Unchecked="OnThemeToggled"/>
                 </Grid>
 
-                <!-- Search -->
                 <Grid Grid.Row="1" Margin="16,4,16,10">
                     <TextBox x:Name="SearchBox" Style="{StaticResource ModernTextBoxStyle}" MinHeight="32" Padding="34,0,10,0"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
@@ -74,7 +59,6 @@
                                Visibility="{Binding SearchText, Converter={StaticResource NullToVisibilityConverter}}"/>
                 </Grid>
 
-                <!-- Smart views -->
                 <StackPanel Grid.Row="2" Margin="8,0">
                     <ListBox ItemsSource="{Binding SmartViews}" SelectedItem="{Binding SelectedSmartView}"
                              Style="{StaticResource FluentListBoxStyle}"
@@ -102,7 +86,6 @@
 
                 <Separator Grid.Row="2" VerticalAlignment="Bottom" Margin="16,4" Background="{DynamicResource DividerBrush}"/>
 
-                <!-- Groups -->
                 <Grid Grid.Row="3">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -149,7 +132,6 @@
                     </ListBox>
                 </Grid>
 
-                <!-- Current user -->
                 <Border Grid.Row="4" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
                         Padding="16,10">
                     <Grid>
@@ -191,7 +173,6 @@
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
                       Background="Transparent" Cursor="SizeWE"/>
 
-        <!-- ================= MIDDLE: TASK LIST ================= -->
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -199,7 +180,6 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- List header -->
             <Grid Grid.Row="0" Margin="24,20,24,8">
                 <StackPanel>
                     <TextBlock Style="{StaticResource PageTitleTextStyle}"
@@ -209,7 +189,6 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <!-- Sort toggle: manual ranking vs importance -->
                     <Border Style="{StaticResource BadgeStyle}" Padding="3" VerticalAlignment="Center" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
                             <RadioButton Content="My order" Cursor="Hand" GroupName="SortMode"
@@ -265,14 +244,12 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Completed visibility -->
                     <CheckBox Style="{StaticResource AccentCheckBoxStyle}" VerticalAlignment="Center"
                               FontSize="11.5" Content="Show completed"
                               IsChecked="{Binding ShowCompleted}"/>
                 </StackPanel>
             </Grid>
 
-            <!-- Tasks + empty state -->
             <Grid Grid.Row="1" Margin="16,0,16,0">
                 <ListBox x:Name="TaskListBox"
                          ItemsSource="{Binding Tasks}"
@@ -301,7 +278,6 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Empty state -->
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="{Binding HasTasks, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                     <Border Width="88" Height="88" CornerRadius="44" Background="{DynamicResource AccentSubtleBrush}"
@@ -316,7 +292,6 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Quick add -->
             <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="24,8,24,20" Padding="6">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -346,7 +321,6 @@
             </Border>
         </Grid>
 
-        <!-- ================= RIGHT: TASK DETAILS ================= -->
         <Border Grid.Column="3" Width="360" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0"
                 Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}"
                 Background="{DynamicResource CardBackgroundBrush}">
@@ -376,7 +350,6 @@
             <views:TaskDetailPanel DataContext="{Binding SelectedTask}"/>
         </Border>
 
-        <!-- ================= TOAST ================= -->
         <Border x:Name="Toast" Grid.ColumnSpan="4" HorizontalAlignment="Center" VerticalAlignment="Bottom"
                 Margin="0,0,0,28" Padding="18,11" CornerRadius="8" Opacity="0"
                 Background="{DynamicResource ToastBackgroundBrush}"

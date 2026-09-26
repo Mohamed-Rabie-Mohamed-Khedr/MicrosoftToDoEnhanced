@@ -5,11 +5,6 @@ using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
-/// <summary>
-/// DataContext of GroupSettingsView. Supports creating/editing a group, member
-/// management, the activity feed (keyset-paged group posts) and the danger zone
-/// for the admin.
-/// </summary>
 public class GroupSettingsViewModel : ViewModelBase
 {
     private const int PageSize = 20;
@@ -22,6 +17,9 @@ public class GroupSettingsViewModel : ViewModelBase
     private int? _groupId;
     private bool _hasMorePosts;
     private int? _lowestPostId;
+    private string? _groupName;
+    private string? _groupDescription;
+    private string _color = "#0078D4";
 
     public GroupSettingsViewModel(
         User currentUser, Group? existing, MainViewModel owner, IConfirmationService confirmation)
@@ -65,9 +63,23 @@ public class GroupSettingsViewModel : ViewModelBase
     public ICommand AddPostCommand { get; }
     public ICommand LoadMorePostsCommand { get; }
 
-    public string? GroupName { get; set; }
-    public string? GroupDescription { get; set; }
-    public string Color { get; set; } = "#0078D4";
+    public string? GroupName
+    {
+        get => _groupName;
+        set => SetProperty(ref _groupName, value);
+    }
+
+    public string? GroupDescription
+    {
+        get => _groupDescription;
+        set => SetProperty(ref _groupDescription, value);
+    }
+
+    public string Color
+    {
+        get => _color;
+        set => SetProperty(ref _color, value);
+    }
 
     public List<string> ColorChoices { get; } = new()
     {
@@ -84,7 +96,6 @@ public class GroupSettingsViewModel : ViewModelBase
 
     public bool IsOwner => _workingGroup.AdminID == _currentUser.UserID;
 
-    /// <summary>The working group id once it exists (null while creating an unsaved group).</summary>
     public int? GroupId => _groupId;
 
     public bool HasMorePosts
@@ -112,6 +123,9 @@ public class GroupSettingsViewModel : ViewModelBase
 
     private async Task AddMemberAsync()
     {
+        if (!IsOwner)
+            return;
+
         if (_groupId is not int groupId)
         {
             _owner.RaiseToast("Save the group first, then invite members");
@@ -173,8 +187,6 @@ public class GroupSettingsViewModel : ViewModelBase
             return;
         }
 
-        // Create path: keep the dialog open so the user can invite members/post right away.
-        // The dialog only closes when the user explicitly does so.
         _groupId = await GroupRepository.AddGroupAsync(_workingGroup.AdminID, name, description, Color);
         _workingGroup.GroupID = _groupId.Value;
         await LoadMembersAsync(_groupId.Value);
@@ -230,10 +242,6 @@ public class GroupSettingsViewModel : ViewModelBase
         await AppendPostsAsync(groupId);
     }
 
-    /// <summary>
-    /// Fetches the next page using the keyset cursor and appends it to the existing
-    /// collection. Never clears: only a fresh load (<see cref="LoadPostsAsync"/>) does that.
-    /// </summary>
     private async Task AppendPostsAsync(int groupId)
     {
         var posts = await PostRepository.GetPostsAsync(groupId, _currentUser.UserID, _lowestPostId, PageSize);

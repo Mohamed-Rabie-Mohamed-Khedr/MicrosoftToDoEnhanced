@@ -5,17 +5,8 @@ using System.Windows.Media;
 
 namespace MicrosoftToDoEnhanced.Controls;
 
-/// <summary>
-/// Reusable task row. Code-behind only carries UI interaction plumbing:
-/// click-to-select and drag initiation. Persisting the new order ("Ranking")
-/// is delegated to the view-model through ReorderRequested (view concern hook).
-/// </summary>
 public partial class TaskItem : UserControl
 {
-    /// <summary>
-    /// Raised when the user drops this item onto another task while dragging.
-    /// Args carry the dragged item and the drop target; the view-model updates Ranking.
-    /// </summary>
     public static readonly RoutedEvent ReorderRequestedEvent = EventManager.RegisterRoutedEvent(
         nameof(ReorderRequested), RoutingStrategy.Bubble, typeof(RoutedPropertyChangedEventHandler<object>), typeof(TaskItem));
 
@@ -34,7 +25,6 @@ public partial class TaskItem : UserControl
 
     private void OnItemClicked(object sender, MouseButtonEventArgs e)
     {
-        // Let the parent ListBox select the container; the VM observes SelectedTask.
         var listBoxItem = FindAncestor<ListBoxItem>(this);
         if (listBoxItem is not null)
             listBoxItem.IsSelected = true;

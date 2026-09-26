@@ -9,9 +9,6 @@ public enum AppTheme
     Dark
 }
 
-/// <summary>
-/// Swaps the active theme resource dictionary at runtime (UI-level concern only).
-/// </summary>
 public static class ThemeManager
 {
     private const string LightSource = "Themes/LightTheme.xaml";
@@ -40,20 +37,12 @@ public static class ThemeManager
         app.Resources.MergedDictionaries.Insert(0, dictionary);
         CurrentTheme = theme;
 
-        // Accent color is independent of Light/Dark mode: carry it across the swap.
         ApplyAccent(CurrentAccentHex);
     }
 
     public static void Toggle() =>
         ApplyTheme(CurrentTheme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark);
 
-    /// <summary>
-    /// Applies a hex accent color (#RRGGBB) live.
-    /// WPF freezes any SolidColorBrush that lives in a resource dictionary, so in-place
-    /// mutation is not possible. Instead we replace the resource values for the accent keys
-    /// (no dictionary reload); DynamicResource consumers re-resolve instantly, so every open
-    /// window updates immediately.
-    /// </summary>
     public static void ApplyAccentColor(string hexColor)
     {
         if (string.IsNullOrWhiteSpace(hexColor) || !TryParseColor(hexColor, out _))
@@ -88,7 +77,6 @@ public static class ThemeManager
         }
         catch
         {
-            // fall through to failure
         }
 
         color = default;

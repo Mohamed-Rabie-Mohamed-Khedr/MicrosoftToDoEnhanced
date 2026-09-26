@@ -8,15 +8,6 @@
              d:DesignHeight="700" d:DesignWidth="360"
              Background="{DynamicResource CardBackgroundBrush}">
 
-    <!-- Placeholder bindings (DataContext = SelectedTask):
-         TaskName, IsCompleted, Description, Color, LevelName,
-         DueDate, EndDate (DateTime?), SelectedRecurrence, RecurrenceOptions,
-         Steps (ObservableCollection), NewStepTitle, AddStepCommand, ToggleStepCommand, RemoveStepCommand,
-         Attachments (ObservableCollection), AddAttachmentCommand, RemoveAttachmentCommand,
-         AssignedToName, AssignedToColor, Assignees, SelectedAssignee,
-         DeleteTaskCommand, SaveTaskCommand
-         Parent VM commands resolved via Tag: CloseDetailsCommand
-    -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -24,7 +15,6 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ===== Header ===== -->
         <Grid Grid.Row="0" Margin="16,12,8,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -44,11 +34,9 @@
 
         <Separator Grid.Row="0" VerticalAlignment="Bottom" Background="{DynamicResource DividerBrush}"/>
 
-        <!-- ===== Body ===== -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16,8,16,16">
             <StackPanel>
 
-                <!-- Title row: complete toggle + editable name -->
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -62,7 +50,6 @@
                              CaretBrush="{DynamicResource AccentBrush}"/>
                 </Grid>
 
-                <!-- Importance -->
                 <TextBlock Text="Importance" Style="{StaticResource CaptionTextStyle}" Margin="0,16,0,6"/>
                 <StackPanel Orientation="Horizontal">
                     <ToggleButton Content="Low" Margin="0,0,6,0" Padding="12,6" Cursor="Hand"
@@ -109,7 +96,6 @@
                     </ToggleButton>
                 </StackPanel>
 
-                <!-- Schedule -->
                 <TextBlock Text="Schedule" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
                 <Border Style="{StaticResource CardStyle}" Padding="12" Effect="{x:Null}">
                     <StackPanel>
@@ -145,7 +131,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Steps (subtasks) -->
                 <Grid Margin="0,18,0,6">
                     <TextBlock Text="Steps" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
                     <TextBlock HorizontalAlignment="Right" Style="{StaticResource CaptionTextStyle}"
@@ -192,7 +177,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <!-- Add a step -->
                         <Grid Margin="4,4,4,2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -217,7 +201,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Assign to -->
                 <TextBlock Text="Assigned to" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
                 <ComboBox Style="{StaticResource ModernComboBoxStyle}"
                           ItemContainerStyle="{StaticResource ModernComboBoxItemStyle}"
@@ -236,7 +219,6 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <!-- Attachments -->
                 <Grid Margin="0,18,0,6">
                     <TextBlock Text="Attachments" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
                     <Button HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}" Content="+ Add file"
@@ -278,7 +260,6 @@
                     </ItemsControl>
                 </Border>
 
-                <!-- Description / notes -->
                 <TextBlock Text="Notes" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>
                 <TextBox Style="{StaticResource ModernTextBoxStyle}" MinHeight="80" AcceptsReturn="True"
                          TextWrapping="Wrap" VerticalContentAlignment="Top" Padding="12,10"
@@ -286,7 +267,6 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ===== Footer ===== -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
                 <Button Style="{StaticResource DangerButtonStyle}" MinHeight="30" Padding="12,0"

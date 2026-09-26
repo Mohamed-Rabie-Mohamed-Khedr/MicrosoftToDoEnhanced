@@ -644,6 +644,20 @@ BEGIN
 END
 GO
 
+CREATE PROCEDURE dbo.GetGroup
+    @GroupID      INT,
+    @ActingUserID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
+        THROW 50001, N'You do not have access to this group.', 1;
+
+    SELECT * FROM dbo.Groups WHERE GroupID = @GroupID;
+END
+GO
+
 CREATE PROCEDURE dbo.AddGroupMember
     @GroupID      INT,
     @UserID       INT,
@@ -1118,8 +1132,13 @@ BEGIN
         IF @CurrentStatus = 1 AND @TaskStatusID = 3
             THROW 50004, N'A pending task cannot be completed before it is approved.', 1;
 
+        DECLARE @RequestedStatus INT = @TaskStatusID;
+
         IF @CurrentStatus = 1 AND dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
             SET @TaskStatusID = 1;
+
+        DECLARE @StatusForced BIT =
+            CASE WHEN @TaskStatusID <> @RequestedStatus THEN 1 ELSE 0 END;
 
         DECLARE @OldStart DATETIME2;
         DECLARE @OldEnd   DATETIME2;
@@ -1179,11 +1198,15 @@ BEGIN
                 PlannedEndDate   = @OldEnd
             WHERE TaskID = @TaskID;
 
-            SELECT T.TaskStatusID AS TaskStatusID,
-                   @NewStart      AS PlannedStartDate,
-                   @OldEnd        AS PlannedEndDate
-            FROM dbo.Tasks T
-            WHERE T.TaskID = @TaskID;
+            DECLARE @NextOccurrenceStatus INT = 2;
+            UPDATE dbo.Tasks
+            SET TaskStatusID = @NextOccurrenceStatus
+            WHERE TaskID = @TaskID;
+
+            SELECT @NextOccurrenceStatus AS TaskStatusID,
+                   @NewStart              AS PlannedStartDate,
+                   @OldEnd                AS PlannedEndDate,
+                   @StatusForced          AS StatusForced;
 
             COMMIT TRANSACTION;
             RETURN;
@@ -1195,7 +1218,8 @@ BEGIN
 
         SELECT @TaskStatusID AS TaskStatusID,
                @OldStart     AS PlannedStartDate,
-               @OldEnd       AS PlannedEndDate;
+               @OldEnd       AS PlannedEndDate,
+               @StatusForced AS StatusForced;
 
         COMMIT TRANSACTION;
     END TRY

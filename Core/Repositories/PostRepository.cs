@@ -4,7 +4,6 @@ using Microsoft.Data.SqlClient;
 
 namespace Core.Repositories;
 
-/// <summary>A feed row rendered on the group wall (GetPostsInGroup).</summary>
 public sealed record PostFeedItem(
     int PostID,
     int GroupID,
@@ -21,7 +20,6 @@ public sealed record PostFeedItem(
 
 public static class PostRepository
 {
-    /// <summary>Creates a post as a group member. Returns the new PostID.</summary>
     public static async Task<int> AddPostAsync(int groupId, int userId, string content)
     {
         var postId = await SqlHelper.ExecuteProcReturnAsync("AddPostInGroup",
@@ -32,7 +30,6 @@ public static class PostRepository
         return postId ?? throw new InvalidOperationException("The post could not be created.");
     }
 
-    /// <summary>Deletes a post; the author (or a managing member) may do this (server THROW 50001).</summary>
     public static async Task DeletePostAsync(int postId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeletePostInGroup", true,
@@ -40,10 +37,6 @@ public static class PostRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    /// <summary>
-    /// Keyset paging (newest first): pass the lowest already-loaded PostID as
-    /// <paramref name="beforePostId"/> to fetch the previous page; null gets the newest page.
-    /// </summary>
     public static async Task<List<PostFeedItem>> GetPostsAsync(
         int groupId, int actingUserId, int? beforePostId = null, int take = 20)
     {

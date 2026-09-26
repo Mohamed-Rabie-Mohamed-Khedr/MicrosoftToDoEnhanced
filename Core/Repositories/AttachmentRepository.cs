@@ -6,10 +6,6 @@ namespace Core.Repositories;
 
 public static class AttachmentRepository
 {
-    /// <summary>
-    /// Metadata only (no bytes) for the given tasks, e.g. for the detail panel and
-    /// "has attachment" badges.
-    /// </summary>
     public static async Task<List<Attachment>> GetAttachmentInfosAsync(IReadOnlyList<int> taskIds)
     {
         var rows = await SqlHelper.QueryAsync("GetAttachmentInfos", true,
@@ -31,7 +27,6 @@ public static class AttachmentRepository
         return attachments;
     }
 
-    /// <summary>Stores an attachment and returns its new AttachmentID.</summary>
     public static async Task<int> AddAttachmentAsync(
         int taskId, string fileName, byte[] fileData, int fileSizeKB, int actingUserId)
     {
@@ -49,7 +44,6 @@ public static class AttachmentRepository
         return attachmentId ?? throw new InvalidOperationException("The attachment could not be saved.");
     }
 
-    /// <summary>Loads a single attachment with its bytes for download/viewing.</summary>
     public static async Task<Attachment?> GetAttachmentDataAsync(int attachmentId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetAttachmentData", true,

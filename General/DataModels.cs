@@ -278,11 +278,6 @@ public enum RepetitionPeriod
     Yearly = 5
 }
 
-/// <summary>
-/// Single source of truth for every length/size limit enforced by the database schema
-/// (see Core\SQL\CreateDatabase.txt). The UI validates against these so violations are
-/// caught before a round-trip to SQL Server.
-/// </summary>
 public static class DbLimits
 {
     public const int MinUserNameLength = 1;
@@ -304,6 +299,5 @@ public static class DbLimits
 
     public const int MaxFileNameLength = 260;
 
-    /// <summary>Hard cap (10 MiB) for a single attachment so nobody can saturate the database.</summary>
     public const long MaxAttachmentBytes = 10L * 1024 * 1024;
 }

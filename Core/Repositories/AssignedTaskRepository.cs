@@ -21,9 +21,6 @@ public static class AssignedTaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    /// <summary>
-    /// All assignments on a task (the detail panel lists them all).
-    /// </summary>
     public static async Task<List<AssignedTask>> GetByTaskAsync(int taskId)
     {
         var rows = await SqlHelper.QueryAsync(
@@ -32,10 +29,6 @@ public static class AssignedTaskRepository
         return rows.Select(r => new AssignedTask(r)).ToList();
     }
 
-    /// <summary>
-    /// The "Assigned to me" smart view: top-level, non-completed tasks assigned to
-    /// <paramref name="userId"/>, returned as full task rows.
-    /// </summary>
     public static async Task<List<TodoTask>> GetAssignedTasksAsync(int userId, bool byImportance, int actingUserId)
     {
         var procedure = byImportance ? "GetAssignedTasksByImportance" : "GetAssignedTasksByRanking";
@@ -45,9 +38,6 @@ public static class AssignedTaskRepository
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    /// <summary>
-    /// First assignee of a task (a task can have several; the UI shows one).
-    /// </summary>
     public static async Task<User?> GetAssignedUserAsync(int taskId)
     {
         var rows = await SqlHelper.QueryAsync(

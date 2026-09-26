@@ -3,18 +3,6 @@ using System.Text;
 
 namespace Core.Security;
 
-/// <summary>
-/// Password hashing with PBKDF2-HMAC-SHA256 (the modern default in .NET).
-///
-/// Storage format:  pbkdf2$210000$&lt;salt-base64&gt;$&lt;hash-base64&gt;
-/// Salt is a fresh 16-byte random value per password, iterations are stored in the
-/// value itself so the work factor can be raised later without breaking old entries.
-///
-/// Accounts created before this upgrade used unsalted SHA-256 (64 hex characters).
-/// Those are still verified here and are flagged (<see cref="VerifyResult.NeedsRehash"/>)
-/// so the application can transparently upgrade them to PBKDF2 on their next sign-in.
-/// Comparison is constant-time via <see cref="CryptographicOperations.FixedTimeEquals"/>.
-/// </summary>
 public static class PasswordHasher
 {
     public const int Iterations = 210_000;

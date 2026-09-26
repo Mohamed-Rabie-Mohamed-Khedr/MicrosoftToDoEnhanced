@@ -60,11 +60,6 @@ public class AsyncRelayCommand : ICommand
         _canExecute = canExecute;
     }
 
-    /// <summary>
-    /// Global hook for exceptions that escape an async command's await. The host
-    /// application wires this once (e.g. to a toast); async void never lets the
-    /// exception reach the dispatcher unchecked.
-    /// </summary>
     public static Action<Exception>? ErrorHandler { get; set; }
 
     public event EventHandler? CanExecuteChanged

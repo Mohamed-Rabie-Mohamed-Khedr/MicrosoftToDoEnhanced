@@ -8,13 +8,11 @@ using MicrosoftToDoEnhanced.ViewModels;
 
 namespace MicrosoftToDoEnhanced
 {
-    /// <summary>
-    /// Three-pane shell. Code-behind carries UI-only plumbing:
-    /// theme toggle, toast animation, and the drag-reorder notification hook.
-    /// All business behavior is exposed via view-model bindings in XAML.
-    /// </summary>
     public partial class MainWindow : Window
     {
+        private Storyboard? _toastShow;
+        private Storyboard? _toastHide;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -46,7 +44,6 @@ namespace MicrosoftToDoEnhanced
             }
             catch (Exception)
             {
-                // Errors are surfaced to the user by the view-model's own handling.
             }
         }
 
@@ -56,7 +53,6 @@ namespace MicrosoftToDoEnhanced
                 ThemeManager.ApplyTheme(toggle.IsChecked == true ? AppTheme.Dark : AppTheme.Light);
         }
 
-        // Fired by TaskItem after a drag-drop. Ranking persistence lives in the VM.
         private void OnTaskReorderRequested(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (DataContext is not MainViewModel viewModel)
@@ -67,11 +63,24 @@ namespace MicrosoftToDoEnhanced
             viewModel.ReorderTasksCommand.Execute(new ReorderPayload(dragged, target));
         }
 
-        /// <summary>Lightweight toast helper (UI concern).</summary>
         public void ShowToast(string message)
         {
+            EnsureToastStoryboards();
+
+            _toastShow!.Stop();
+            _toastHide!.Stop();
+
             ToastText.Text = message;
             Toast.IsHitTestVisible = true;
+
+            _toastShow.Begin();
+            _toastHide.Begin();
+        }
+
+        private void EnsureToastStoryboards()
+        {
+            if (_toastShow is not null && _toastHide is not null)
+                return;
 
             var show = new Storyboard();
             show.Children.Add(new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
@@ -90,8 +99,8 @@ namespace MicrosoftToDoEnhanced
             Storyboard.SetTargetProperty(hide.Children[1], new PropertyPath(TranslateTransform.YProperty));
             hide.Completed += (_, _) => Toast.IsHitTestVisible = false;
 
-            show.Begin();
-            hide.Begin();
+            _toastShow = show;
+            _toastHide = hide;
         }
     }
 }

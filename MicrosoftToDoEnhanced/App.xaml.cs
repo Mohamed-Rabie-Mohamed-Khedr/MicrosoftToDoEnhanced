@@ -8,9 +8,6 @@ using System.Windows;
 
 namespace MicrosoftToDoEnhanced
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
     }

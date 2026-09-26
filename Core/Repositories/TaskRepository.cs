@@ -4,7 +4,6 @@ using Microsoft.Data.SqlClient;
 
 namespace Core.Repositories;
 
-/// <summary>Per-task aggregates shown on list rows (loaded via GetTaskListExtras).</summary>
 public sealed record TaskListExtras(
     int TaskID,
     int SubtaskCount,
@@ -18,7 +17,6 @@ public sealed record TaskListExtras(
     int? RepetitionTypeID,
     string? RepetitionName);
 
-/// <summary>Everything the detail panel needs in one round trip (GetTaskExtras).</summary>
 public sealed record TaskDetailBundle(
     DataRow Task,
     List<TodoTask> Steps,
@@ -38,17 +36,12 @@ public sealed record TaskCounts(
     int MonthlyCount,
     int YearlyCount);
 
-/// <summary>
-/// Outcome of UpdateTaskStatus: the effective status after the stored procedure applied its
-/// rules (e.g. a non-manager group member is forced back to Pending), plus the task's planned
-/// dates as of the toggle (already advanced for a completed recurring task).
-/// </summary>
 public sealed record TaskStatusResult(
     int TaskStatusID,
     DateTime? PlannedStartDate,
-    DateTime? PlannedEndDate);
+    DateTime? PlannedEndDate,
+    bool StatusForced);
 
-/// <summary>All small lookup tables, returned by one GetLookups call.</summary>
 public sealed record LookupBundle(
     List<TodoTaskStatus> Statuses,
     List<LevelOfImportance> Levels,
@@ -81,12 +74,6 @@ public static class TaskRepository
         return taskId ?? throw new InvalidOperationException("The task could not be added.");
     }
 
-    /// <summary>
-    /// Inserts or updates a task together with its plan (due dates/repetition) and its
-    /// assignees in a single server transaction. Always returns the TaskID: the procedure
-    /// emits "SELECT @TaskID AS NewID" on both the insert and update paths, so the value
-    /// is never null.
-    /// </summary>
     public static async Task<int?> SaveTaskAsync(
         int? taskId, int? taskParentId, int taskStatusId, int userId, int? groupId,
         string taskName, int importanceLevelId, string? description, string color,
@@ -136,13 +123,14 @@ public static class TaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
 
         if (rows.Count == 0)
-            return new TaskStatusResult(taskStatusId, null, null);
+            return new TaskStatusResult(taskStatusId, null, null, false);
 
         var row = rows[0];
         return new TaskStatusResult(
             Convert.ToInt32(row["TaskStatusID"]),
             GetNullableDateTime(row, "PlannedStartDate"),
-            GetNullableDateTime(row, "PlannedEndDate"));
+            GetNullableDateTime(row, "PlannedEndDate"),
+            !row.IsNull("StatusForced") && Convert.ToBoolean(row["StatusForced"]));
     }
 
     public static async Task ApproveTaskAsync(int taskId, int actingUserId)
@@ -191,10 +179,6 @@ public static class TaskRepository
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    /// <summary>
-    /// Reorders an entire list with a single call. <paramref name="orderedTaskIds"/> must
-    /// contain exactly the visible top-level tasks of the scope, in their desired order.
-    /// </summary>
     public static async Task ReorderTasksAsync(
         int userId, int? groupId, IReadOnlyList<int> orderedTaskIds, int actingUserId)
     {
@@ -234,10 +218,6 @@ public static class TaskRepository
             GetString(r, "RepetitionName"))).ToList();
     }
 
-    /// <summary>
-    /// Loads the full detail payload (task + steps + attachment metadata + assignees)
-    /// in one round trip. Returns null when the task does not exist.
-    /// </summary>
     public static async Task<TaskDetailBundle?> GetTaskExtrasAsync(int taskId, int actingUserId)
     {
         await using var results = await SqlHelper.QueryMultipleAsync("GetTaskExtras",
@@ -285,7 +265,6 @@ public static class TaskRepository
             Convert.ToInt32(row["YearlyCount"]));
     }
 
-    /// <summary>Loads ALL small lookup tables in one round trip.</summary>
     public static async Task<LookupBundle> GetLookupsAsync()
     {
         await using var results = await SqlHelper.QueryMultipleAsync("GetLookups");
@@ -351,10 +330,6 @@ public static class TaskRepository
     public static async Task<List<LevelOfImportance>> GetImportanceLevelsAsync() =>
         (await GetLookupsAsync()).Levels;
 
-    /// <summary>
-    /// Counts visible (non-completed) parent tasks for a smart-view badge.
-    /// Kept for backward compatibility; newer callers should prefer GetTaskCountsAsync.
-    /// </summary>
     public static async Task<int> CountParentTasksAsync(int userId, int? importanceLevelId = null)
     {
         var sql = "SELECT COUNT(*) FROM Tasks WHERE UserID = @UserID AND TaskParentID IS NULL AND TaskStatusID <> 3 AND GroupID IS NULL";

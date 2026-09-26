@@ -72,10 +72,6 @@ public static class UserRepository
         }).ToList();
     }
 
-    /// <summary>
-    /// Creates a user. Returns the new identity. Raises InvalidOperationException
-    /// when the username is already taken (server THROW 50003).
-    /// </summary>
     public static async Task<int> AddUserAsync(
         string userName, string showName, string? email, string passwordHash, int permissionId, string color)
     {
@@ -93,9 +89,6 @@ public static class UserRepository
         return userId ?? throw new InvalidOperationException("The user could not be added.");
     }
 
-    /// <summary>
-    /// Self-service profile edit: identity and display fields only, never password/permissions.
-    /// </summary>
     public static async Task UpdateUserProfileAsync(
         int userId, string userName, string showName, string? email, string color)
     {
@@ -124,8 +117,6 @@ public static class UserRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    /// <summary>Outcome of a password check. NeedsRehash means the stored verifier predates
-    /// PBKDF2 and was transparently upgraded on this sign-in.</summary>
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
     {
         public static SignInResult Succeeded(User user) => new(true, user, false);
@@ -139,12 +130,6 @@ public static class UserRepository
         public static RegisterResult Failed(string message) => new(false, message);
     }
 
-    /// <summary>
-    /// Password-based authentication. Uses PBKDF2 via <see cref="PasswordHasher"/> and
-    /// transparently migrates legacy unsalted SHA-256 verifiers on the next successful sign-in.
-    /// Throws when the database is unreachable, so callers can tell "wrong credentials"
-    /// (a Failed result) apart from "service unavailable" (an exception).
-    /// </summary>
     public static async Task<SignInResult> SignInAsync(string userName, string password)
     {
         var trimmedName = userName?.Trim();
