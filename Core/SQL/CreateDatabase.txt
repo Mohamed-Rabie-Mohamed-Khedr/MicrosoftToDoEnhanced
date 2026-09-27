@@ -1,4 +1,4 @@
-﻿IF DB_ID(N'MicrosoftToDoEnhanced') IS NULL
+IF DB_ID(N'MicrosoftToDoEnhanced') IS NULL
 BEGIN
     DECLARE @CreateDbSql NVARCHAR(MAX) = N'CREATE DATABASE MicrosoftToDoEnhanced;';
     EXEC sp_executesql @CreateDbSql;
@@ -403,42 +403,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.UpdateUserProfile
-    @UserID        INT,
-    @UserName      NVARCHAR(100),
-    @ShowName      NVARCHAR(100),
-    @UserEmail     VARCHAR(255),
-    @Color         VARCHAR(16),
-    @ActingUserID  INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        IF @ActingUserID <> @UserID
-            THROW 50001, N'You can only update your own profile.', 1;
-
-        UPDATE dbo.Users
-        SET UserName  = @UserName,
-            ShowName  = @ShowName,
-            UserEmail = CASE WHEN NULLIF(LTRIM(RTRIM(@UserEmail)), N'') IS NULL THEN NULL
-                             ELSE LOWER(LTRIM(RTRIM(@UserEmail))) END,
-            Color     = @Color
-        WHERE UserID = @UserID;
-
-        IF @@ROWCOUNT = 0
-            THROW 50002, N'User was not found.', 1;
-
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
 CREATE PROCEDURE dbo.UpdatePasswordHash
     @UserID        INT,
     @PasswordHash  VARCHAR(255),
@@ -465,21 +429,6 @@ BEGIN
         IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
         THROW;
     END CATCH
-END
-GO
-
-CREATE PROCEDURE dbo.GetUser
-    @UserID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF @ActingUserID <> @UserID
-        THROW 50001, N'You can only view your own account.', 1;
-
-    SELECT UserID, UserName, ShowName, UserEmail, PasswordHash, PermissionID, Color
-    FROM dbo.Users WHERE UserID = @UserID;
 END
 GO
 
@@ -664,20 +613,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetGroup
-    @GroupID      INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'You do not have access to this group.', 1;
-
-    SELECT * FROM dbo.Groups WHERE GroupID = @GroupID;
-END
-GO
-
 CREATE PROCEDURE dbo.AddGroupMember
     @GroupID      INT,
     @UserID       INT,
@@ -772,39 +707,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.DeletePostInGroup
-    @PostID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DECLARE @GroupID INT;
-        DECLARE @AuthorID INT;
-
-        SELECT @GroupID = GroupID, @AuthorID = UserID
-        FROM dbo.PostsInGroups WHERE PostID = @PostID;
-
-        IF @GroupID IS NULL
-            THROW 50002, N'Post was not found.', 1;
-
-        IF @AuthorID <> @ActingUserID AND dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
-            THROW 50001, N'You do not have permission to delete this post.', 1;
-
-        DELETE FROM dbo.PostLikes WHERE PostID = @PostID;
-        DELETE FROM dbo.PostsInGroups WHERE PostID = @PostID;
-
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
 CREATE PROCEDURE dbo.GetPostsInGroup
     @GroupID       INT,
     @ActingUserID  INT,
@@ -835,56 +737,6 @@ BEGIN
     WHERE P.GroupID = @GroupID
       AND (@BeforePostID IS NULL OR P.PostID < @BeforePostID)
     ORDER BY P.PostID DESC;
-END
-GO
-
-CREATE PROCEDURE dbo.AddPostLike
-    @PostID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DECLARE @GroupID INT;
-        SELECT @GroupID = GroupID FROM dbo.PostsInGroups WHERE PostID = @PostID;
-
-        IF @GroupID IS NULL
-            THROW 50002, N'Post was not found.', 1;
-
-        IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-            THROW 50001, N'You must be a member of the group to like posts.', 1;
-
-        IF NOT EXISTS (SELECT 1 FROM dbo.PostLikes WHERE PostID = @PostID AND UserID = @ActingUserID)
-            INSERT INTO dbo.PostLikes (PostID, UserID) VALUES (@PostID, @ActingUserID);
-
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
-CREATE PROCEDURE dbo.RemovePostLike
-    @PostID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DELETE FROM dbo.PostLikes WHERE PostID = @PostID AND UserID = @ActingUserID;
-
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
 END
 GO
 
@@ -1098,39 +950,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.ApproveTask
-    @TaskID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DECLARE @GroupID INT;
-        DECLARE @CurrentStatus INT;
-
-        SELECT @GroupID = GroupID, @CurrentStatus = TaskStatusID
-        FROM dbo.Tasks WHERE TaskID = @TaskID;
-
-        IF @CurrentStatus IS NULL
-            THROW 50002, N'Task was not found.', 1;
-
-        IF dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
-            THROW 50004, N'Only the group owner can approve tasks.', 1;
-
-        IF @CurrentStatus = 1
-            UPDATE dbo.Tasks SET TaskStatusID = 2 WHERE TaskID = @TaskID;
-
-        COMMIT TRANSACTION;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
 -- CHANGED (UpdateTaskStatus): the WEEK/MONTH/YEAR "next occurrence" math now keeps a start date that
 -- is still in the future (early completion) and re-anchors last-day-of-month recurrences (Jan 31, Feb 29).
 CREATE PROCEDURE dbo.UpdateTaskStatus
@@ -1310,23 +1129,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetTask
-    @TaskID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @GroupID INT;
-    SELECT @GroupID = GroupID FROM dbo.Tasks WHERE TaskID = @TaskID;
-
-    IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'You do not have access to this task.', 1;
-
-    SELECT * FROM dbo.Tasks WHERE TaskID = @TaskID;
-END
-GO
-
 CREATE PROCEDURE dbo.GetTaskParentsByRanking
     @UserID       INT,
     @ActingUserID INT
@@ -1464,97 +1266,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetAssignedTasksByRanking
-    @UserID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own assigned tasks.', 1;
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Assigned A ON T.TaskID = A.TaskID
-    WHERE A.ToUserID = @UserID AND T.TaskParentID IS NULL
-    ORDER BY T.Ranking, T.LevelOfImportanceID DESC;
-END
-GO
-
-CREATE PROCEDURE dbo.GetAssignedTasksByImportance
-    @UserID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own assigned tasks.', 1;
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Assigned A ON T.TaskID = A.TaskID
-    WHERE A.ToUserID = @UserID AND T.TaskParentID IS NULL
-    ORDER BY T.LevelOfImportanceID DESC, T.Ranking;
-END
-GO
-
--- CHANGED (GetTasksByIds): the per-row dbo.IsGroupMember(...) call was replaced by one set-based
--- EXISTS against dbo.Groups / dbo.GroupMembers (same rules, evaluated once per query not per row).
-CREATE PROCEDURE dbo.GetTasksByIds
-    @TaskIDs     dbo.TVPTaskIDs READONLY,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @IsGlobalAdmin BIT =
-        CASE WHEN EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @ActingUserID AND PermissionID = 2)
-             THEN 1 ELSE 0 END;
-
-    SELECT T.TaskID,
-           T.TaskParentID,
-           T.TaskStatusID,
-           S.StatusName,
-           T.UserID,
-           T.GroupID,
-           T.Ranking,
-           T.TaskName,
-           T.LevelOfImportanceID,
-           L.LevelName,
-           L.Color AS LevelColor,
-           T.Description,
-           T.CreationDate,
-           T.Color,
-           P.PlannedStartDate AS DueStartDate,
-           P.PlannedEndDate   AS DueEndDate,
-           P.RepetitionTypeID,
-           R.RepetitionName,
-           A.ToUserID      AS AssignedToUserID,
-           AU.ShowName     AS AssignedToName,
-           AU.Color        AS AssignedToColor
-    FROM @TaskIDs I
-    JOIN dbo.Tasks T ON T.TaskID = I.TaskID
-    JOIN dbo.TaskStatus S ON T.TaskStatusID = S.TaskStatusID
-    JOIN dbo.LevelOfImportance L ON T.LevelOfImportanceID = L.LevelOfImportanceID
-    OUTER APPLY (SELECT TOP 1 PP.PlannedStartDate, PP.PlannedEndDate, PP.RepetitionTypeID
-                 FROM dbo.Planned PP WHERE PP.TaskID = T.TaskID
-                 ORDER BY PP.PlannedStartDate DESC) P
-    LEFT JOIN dbo.RepetitionTypes R ON P.RepetitionTypeID = R.RepetitionTypeID
-    OUTER APPLY (SELECT TOP 1 X.ToUserID
-                 FROM dbo.Assigned X WHERE X.TaskID = T.TaskID
-                 ORDER BY X.AssignedID) A
-    LEFT JOIN dbo.Users AU ON A.ToUserID = AU.UserID
-    WHERE (T.GroupID IS NOT NULL
-           AND (@IsGlobalAdmin = 1
-                OR EXISTS (SELECT 1 FROM dbo.Groups G
-                           WHERE G.GroupID = T.GroupID AND G.AdminID = @ActingUserID)
-                OR EXISTS (SELECT 1 FROM dbo.GroupMembers M
-                           WHERE M.GroupID = T.GroupID AND M.UserID = @ActingUserID)))
-       OR (T.GroupID IS NULL AND T.UserID = @ActingUserID)
-    ORDER BY I.SortOrder, T.Ranking, T.LevelOfImportanceID DESC;
-END
-GO
-
 -- CHANGED (GetTaskListExtras): the per-row dbo.IsGroupMember(...) call was replaced by one set-based
 -- EXISTS against dbo.Groups / dbo.GroupMembers (same rules, evaluated once per query not per row).
 CREATE PROCEDURE dbo.GetTaskListExtras
@@ -1591,77 +1302,6 @@ BEGIN
                            WHERE M.GroupID = T.GroupID AND M.UserID = @ActingUserID)))
        OR (T.GroupID IS NULL AND T.UserID = @ActingUserID)
     ORDER BY I.SortOrder, T.Ranking, T.LevelOfImportanceID DESC;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTaskExtras
-    @TaskID       INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @GroupID INT;
-    DECLARE @OwnerID INT;
-    SELECT @GroupID = GroupID, @OwnerID = UserID FROM dbo.Tasks WHERE TaskID = @TaskID;
-
-    IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'You do not have access to this task.', 1;
-    IF @GroupID IS NULL AND @OwnerID <> @ActingUserID
-        THROW 50001, N'You do not have access to this task.', 1;
-
-    SELECT T.TaskID,
-           T.TaskParentID,
-           T.TaskStatusID,
-           S.StatusName,
-           T.UserID,
-           T.GroupID,
-           T.Ranking,
-           T.TaskName,
-           T.LevelOfImportanceID,
-           L.LevelName,
-           L.Color AS LevelColor,
-           T.Description,
-           T.CreationDate,
-           T.Color,
-           P.PlannedStartDate AS DueStartDate,
-           P.PlannedEndDate   AS DueEndDate,
-           P.RepetitionTypeID,
-           R.RepetitionName,
-           A.ToUserID      AS AssignedToUserID,
-           AU.ShowName     AS AssignedToName,
-           AU.Color        AS AssignedToColor,
-           ISNULL(TU.ShowName, N'') AS OwnerName,
-           ISNULL(TU.Color, N'')    AS OwnerColor,
-           CAST(CASE WHEN dbo.CanManageGroup(@ActingUserID, @GroupID) = 1 THEN 1 ELSE 0 END AS BIT) AS CanManage
-    FROM dbo.Tasks T
-    JOIN dbo.TaskStatus S ON T.TaskStatusID = S.TaskStatusID
-    JOIN dbo.LevelOfImportance L ON T.LevelOfImportanceID = L.LevelOfImportanceID
-    LEFT JOIN dbo.Users TU ON T.UserID = TU.UserID
-    OUTER APPLY (SELECT TOP 1 PP.PlannedStartDate, PP.PlannedEndDate, PP.RepetitionTypeID
-                 FROM dbo.Planned PP WHERE PP.TaskID = T.TaskID
-                 ORDER BY PP.PlannedStartDate DESC) P
-    LEFT JOIN dbo.RepetitionTypes R ON P.RepetitionTypeID = R.RepetitionTypeID
-    OUTER APPLY (SELECT TOP 1 X.ToUserID
-                 FROM dbo.Assigned X WHERE X.TaskID = T.TaskID
-                 ORDER BY X.AssignedID) A
-    LEFT JOIN dbo.Users AU ON A.ToUserID = AU.UserID
-    WHERE T.TaskID = @TaskID;
-
-    SELECT * FROM dbo.Tasks
-    WHERE TaskParentID = @TaskID
-    ORDER BY Ranking;
-
-    SELECT AttachmentID, TaskID, FileName, FileSizeKB
-    FROM dbo.Attachments
-    WHERE TaskID = @TaskID
-    ORDER BY AttachmentID;
-
-    SELECT U.UserID, U.UserName, U.ShowName, U.Color
-    FROM dbo.Assigned X
-    JOIN dbo.Users U ON X.ToUserID = U.UserID
-    WHERE X.TaskID = @TaskID
-    ORDER BY X.AssignedID;
 END
 GO
 
@@ -1814,35 +1454,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetAttachmentData
-    @AttachmentID INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @GroupID INT;
-    DECLARE @OwnerID INT;
-    SELECT @GroupID = T.GroupID, @OwnerID = T.UserID
-    FROM dbo.Attachments A
-    JOIN dbo.Tasks T ON A.TaskID = T.TaskID
-    WHERE A.AttachmentID = @AttachmentID;
-
-    IF @OwnerID IS NULL
-        THROW 50002, N'Attachment was not found.', 1;
-
-    IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'You do not have access to this attachment.', 1;
-
-    IF @GroupID IS NULL AND @OwnerID <> @ActingUserID
-        THROW 50001, N'You do not have access to this attachment.', 1;
-
-    SELECT A.AttachmentID, A.TaskID, A.FileName, A.FileData, A.FileSizeKB
-    FROM dbo.Attachments A
-    WHERE A.AttachmentID = @AttachmentID;
-END
-GO
-
 CREATE PROCEDURE dbo.DeleteAttachment
     @AttachmentID INT,
     @ActingUserID INT
@@ -1976,52 +1587,6 @@ BEGIN
 
         COMMIT TRANSACTION;
         SELECT @PlannedID AS NewID;
-    END TRY
-    BEGIN CATCH
-        IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
-        THROW;
-    END CATCH
-END
-GO
-
-CREATE PROCEDURE dbo.UpdatePlanned
-    @PlannedID        INT,
-    @TaskID           INT,
-    @PlannedStartDate DATETIME2,
-    @PlannedEndDate   DATETIME2 = NULL,
-    @RepetitionTypeID INT = 1,
-    @ActingUserID     INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRY
-        BEGIN TRANSACTION;
-
-        DECLARE @CurrentTaskID INT;
-        SELECT @CurrentTaskID = TaskID
-        FROM dbo.Planned
-        WHERE PlannedID = @PlannedID;
-
-        IF @CurrentTaskID IS NULL
-            THROW 50002, N'Planned entry was not found.', 1;
-
-        IF @CurrentTaskID <> @TaskID
-            THROW 50003, N'The planned entry belongs to a different task.', 1;
-
-        IF dbo.CanModifyTask(@CurrentTaskID, @ActingUserID) = 0
-            THROW 50001, N'You do not have permission to modify this task.', 1;
-
-        IF @PlannedEndDate < @PlannedStartDate
-            THROW 50003, N'End date cannot be before the start date.', 1;
-
-        UPDATE dbo.Planned
-        SET TaskID           = @TaskID,
-            PlannedStartDate = @PlannedStartDate,
-            PlannedEndDate   = @PlannedEndDate,
-            RepetitionTypeID = @RepetitionTypeID
-        WHERE PlannedID = @PlannedID;
-
-        COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
         IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;

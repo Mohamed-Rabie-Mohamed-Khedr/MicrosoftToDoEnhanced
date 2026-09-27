@@ -37,15 +37,6 @@ public static class AssignedTaskRepository
         return rows.Select(r => new AssignedTask(r)).ToList();
     }
 
-    public static async Task<List<TodoTask>> GetAssignedTasksAsync(int userId, bool byImportance, int actingUserId)
-    {
-        var procedure = byImportance ? "GetAssignedTasksByImportance" : "GetAssignedTasksByRanking";
-        var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-        return rows.Select(r => new TodoTask(r)).ToList();
-    }
-
     public static async Task<User?> GetAssignedUserAsync(int taskId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync(

@@ -31,13 +31,6 @@ public static class PostRepository
         return postId ?? throw new InvalidOperationException("The post could not be created.");
     }
 
-    public static async Task DeletePostAsync(int postId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("DeletePostInGroup", true,
-            new SqlParameter("@PostID", SqlDbType.Int) { Value = postId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task<List<PostFeedItem>> GetPostsAsync(
         int groupId, int actingUserId, int? beforePostId = null, int take = 20)
     {
@@ -63,19 +56,5 @@ public static class PostRepository
             Convert.ToInt32(r["LikeCount"]),
             Convert.ToBoolean(r["LikedByMe"]),
             Convert.ToBoolean(r["IsMine"]))).ToList();
-    }
-
-    public static async Task AddPostLikeAsync(int postId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("AddPostLike", true,
-            new SqlParameter("@PostID", SqlDbType.Int) { Value = postId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
-    public static async Task RemovePostLikeAsync(int postId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("RemovePostLike", true,
-            new SqlParameter("@PostID", SqlDbType.Int) { Value = postId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 }

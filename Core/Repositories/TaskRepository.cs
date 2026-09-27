@@ -133,26 +133,11 @@ public static class TaskRepository
             !row.IsNull("StatusForced") && Convert.ToBoolean(row["StatusForced"]));
     }
 
-    public static async Task ApproveTaskAsync(int taskId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("ApproveTask", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task DeleteTaskAsync(int taskId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeleteTask", true,
             new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
-    public static async Task<TodoTask?> GetTaskAsync(int taskId, int actingUserId)
-    {
-        var rows = await SqlHelper.QueryAsync("GetTask", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-        return rows.Count == 0 ? null : new TodoTask(rows[0]);
     }
 
     public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance, int actingUserId)
@@ -193,14 +178,6 @@ public static class TaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<List<TodoTask>> GetTasksByIdsAsync(IReadOnlyList<int> taskIds, int actingUserId)
-    {
-        var rows = await SqlHelper.QueryAsync("GetTasksByIds", true,
-            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(taskIds)),
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-        return rows.Select(r => new TodoTask(r)).ToList();
-    }
-
     public static async Task<List<TaskListExtras>> GetTaskListExtrasAsync(IReadOnlyList<int> taskIds, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync("GetTaskListExtras", true,
@@ -219,32 +196,6 @@ public static class TaskRepository
             GetNullableDateTime(r, "DueEndDate"),
             GetNullableInt(r, "RepetitionTypeID"),
             GetString(r, "RepetitionName"))).ToList();
-    }
-
-    public static async Task<TaskDetailBundle?> GetTaskExtrasAsync(int taskId, int actingUserId)
-    {
-        await using var results = await SqlHelper.QueryMultipleAsync("GetTaskExtras",
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-
-        var taskTable = await results.ReadAsync();
-        if (taskTable is null || taskTable.Rows.Count == 0)
-            return null;
-
-        var taskRow = taskTable.Rows[0];
-
-        var stepsTable = await results.ReadAsync() ?? new DataTable();
-        var attachmentsTable = await results.ReadAsync() ?? new DataTable();
-        var assigneesTable = await results.ReadAsync() ?? new DataTable();
-
-        return new TaskDetailBundle(
-            taskRow,
-            stepsTable.Rows.Cast<DataRow>().Select(r => new TodoTask(r)).ToList(),
-            attachmentsTable.Rows.Cast<DataRow>().Select(ToAttachment).ToList(),
-            assigneesTable.Rows.Cast<DataRow>().Select(ToLookupUser).ToList(),
-            Convert.ToBoolean(taskRow["CanManage"]),
-            GetString(taskRow, "OwnerName") ?? string.Empty,
-            GetString(taskRow, "OwnerColor") ?? string.Empty);
     }
 
     public static async Task<TaskCounts> GetTaskCountsAsync(int userId, int actingUserId, bool includeCompleted)

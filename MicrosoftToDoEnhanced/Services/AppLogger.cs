@@ -15,8 +15,6 @@ public static class AppLogger
 
     private static readonly string LogFile = Path.Combine(LogDirectory, "app.log");
 
-    public static event EventHandler<string>? ErrorReported;
-
     public static void Log(string message)
     {
         try
@@ -35,10 +33,4 @@ public static class AppLogger
 
     public static void LogError(string context, Exception exception) =>
         Log($"[ERROR] {context}: {exception}");
-
-    public static void ReportError(string message)
-    {
-        Log(message);
-        ErrorReported?.Invoke(null, message);
-    }
 }

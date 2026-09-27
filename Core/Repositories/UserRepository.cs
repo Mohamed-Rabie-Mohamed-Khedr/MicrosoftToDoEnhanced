@@ -49,14 +49,6 @@ public static class UserRepository
         return user;
     }
 
-    public static async Task<User?> GetUserAsync(int userId, int actingUserId)
-    {
-        var rows = await SqlHelper.QueryAsync("GetUser", true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-        return rows.Count == 0 ? null : Scrubbed(rows[0]);
-    }
-
     public static async Task<List<User>> GetAllUsersAsync()
     {
         var rows = await SqlHelper.QueryAsync("SELECT * FROM Users ORDER BY ShowName", false);
@@ -87,27 +79,14 @@ public static class UserRepository
         return userId ?? throw new InvalidOperationException("The user could not be added.");
     }
 
-    public static async Task UpdateUserProfileAsync(
-        int userId, int actingUserId, string userName, string showName, string? email, string color)
-    {
-        await SqlHelper.ExecuteAsync("UpdateUserProfile", true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@UserName", SqlDbType.NVarChar, 100) { Value = userName },
-            new SqlParameter("@ShowName", SqlDbType.NVarChar, 100) { Value = showName },
-            new SqlParameter("@UserEmail", SqlDbType.VarChar, 255)
-            {
-                Value = string.IsNullOrWhiteSpace(email) ? DBNull.Value : email
-            },
-            new SqlParameter("@Color", SqlDbType.VarChar, 16) { Value = color },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task UpdatePasswordHashAsync(int userId, int actingUserId, string passwordHash)
     {
         await SqlHelper.ExecuteAsync("UpdatePasswordHash", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
             new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId },
+            new SqlParameter("@ConfirmGroupImpact", SqlDbType.Bit) { Value = true });
+
     }
 
     public static async Task DeleteUserAsync(int userId, int actingUserId)
@@ -119,7 +98,6 @@ public static class UserRepository
 
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
     {
-        /// <summary>Non-zero when the caller is rate limited and must wait before retrying.</summary>
         public TimeSpan RetryAfter { get; init; }
 
         public bool IsThrottled => RetryAfter > TimeSpan.Zero;
@@ -136,16 +114,9 @@ public static class UserRepository
         public static RegisterResult Failed(string message) => new(false, message);
     }
 
-    /// <summary>
-    /// In-process brute-force throttle. Tracks consecutive failures per user name and
-    /// escalates an artificial delay plus a temporary lock-out, so guessing a password
-    /// is orders of magnitude slower than a legitimate sign-in.
-    /// </summary>
     private sealed class SignInThrottle
     {
         private const int FreeAttempts = 4;
-
-        // Without a cap, unknown user names would grow the table without limit.
         private const int MaxTrackedNames = 512;
 
         private static readonly TimeSpan BasePenalty = TimeSpan.FromMilliseconds(250);

@@ -31,21 +31,6 @@ public static class PlannedTaskRepository
         return plannedId ?? throw new InvalidOperationException("The plan could not be saved.");
     }
 
-    public static async Task UpdateAsync(
-        int plannedId, int taskId, DateTime startDate, DateTime? endDate, int repetitionTypeId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("UpdatePlanned", true,
-            new SqlParameter("@PlannedID", SqlDbType.Int) { Value = plannedId },
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@PlannedStartDate", SqlDbType.DateTime2) { Value = startDate },
-            new SqlParameter("@PlannedEndDate", SqlDbType.DateTime2)
-            {
-                Value = endDate ?? (object)DBNull.Value
-            },
-            new SqlParameter("@RepetitionTypeID", SqlDbType.Int) { Value = repetitionTypeId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task DeleteAsync(int plannedId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeletePlanned", true,

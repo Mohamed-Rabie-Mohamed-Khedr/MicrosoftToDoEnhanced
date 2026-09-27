@@ -47,15 +47,6 @@ public static class GroupRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<Group?> GetGroupAsync(int groupId, int actingUserId)
-    {
-        var rows = await SqlHelper.QueryAsync(
-            "GetGroup", true,
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-        return rows.Count == 0 ? null : new Group(rows[0]);
-    }
-
     public static async Task<List<Group>> GetGroupsForUserAsync(int userId)
     {
         var rows = await SqlHelper.QueryAsync(

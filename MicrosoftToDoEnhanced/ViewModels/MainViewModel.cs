@@ -22,7 +22,6 @@ public class MainViewModel : ViewModelBase
     private SmartViewItem? _selectedSmartView;
     private TodoTaskViewModel? _selectedTask;
     private bool _sortByImportance;
-    private bool _showCompleted;
     private string? _searchText;
     private string? _newTaskTitle;
     private string _currentViewTitle = "All";
@@ -160,20 +159,6 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    public bool ShowCompleted
-    {
-        get => _showCompleted;
-        set
-        {
-            if (!SetProperty(ref _showCompleted, value))
-                return;
-
-            // The sidebar badges are filtered by the same flag, so both have to be
-            // recalculated whenever it changes.
-            RefreshSourceAndViewAsync().SafeFireAndForget(ReportBackgroundError);
-        }
-    }
-
     public string? SearchText
     {
         get => _searchText;
@@ -263,9 +248,7 @@ public class MainViewModel : ViewModelBase
 
     private async Task RefreshCountsAsync()
     {
-        // One round trip and one definition of "counts", so the badges can never
-        // disagree with the numbers the list itself is built from.
-        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, CurrentUserId, ShowCompleted);
+        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, CurrentUserId, includeCompleted: true);
 
         SetSmartViewCount(SmartViewKind.All, counts.AllCount);
         SetSmartViewCount(SmartViewKind.Important, counts.ImportantCount);
@@ -375,7 +358,7 @@ public class MainViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Re-applies the client-side filters (search, completed, sort) to the already
+    /// Re-applies the client-side filters (search, sort) to the already
     /// loaded source data. Synchronous by design: it never touches the database, so
     /// there is no window in which a second call could interleave.
     /// </summary>
@@ -390,9 +373,6 @@ public class MainViewModel : ViewModelBase
             var search = SearchText!.Trim();
             source = source.Where(t => t.TaskName.Contains(search, StringComparison.OrdinalIgnoreCase));
         }
-
-        if (!ShowCompleted)
-            source = source.Where(t => !t.IsCompleted);
 
         var ordered = SortByImportance
             ? source.OrderByDescending(t => t.LevelOfImportanceId).ThenBy(t => t.Ranking)
@@ -507,8 +487,8 @@ public class MainViewModel : ViewModelBase
             task.DueDate = nextStart;
         task.EndDate = result.PlannedEndDate;
 
-        // Rebuild rather than just dropping the item: with "Show completed" off the
-        // task leaves the list, and the "N tasks" subtitle has to follow.
+        // Rebuild to keep the "<n> tasks" subtitle and the visible ordering in sync
+        // with the new completed state; completed tasks stay in the list either way.
         RebuildView();
         await RefreshCountsAsync();
 

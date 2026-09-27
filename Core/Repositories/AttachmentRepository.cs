@@ -45,26 +45,6 @@ public static class AttachmentRepository
         return attachmentId ?? throw new InvalidOperationException("The attachment could not be saved.");
     }
 
-    public static async Task<Attachment?> GetAttachmentDataAsync(int attachmentId, int actingUserId)
-    {
-        var rows = await SqlHelper.QueryAsync("GetAttachmentData", true,
-            new SqlParameter("@AttachmentID", SqlDbType.Int) { Value = attachmentId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-
-        if (rows.Count == 0)
-            return null;
-
-        DataRow row = rows[0];
-        return new Attachment
-        {
-            AttachmentID = Convert.ToInt32(row["AttachmentID"]),
-            TaskID = Convert.ToInt32(row["TaskID"]),
-            FileName = Convert.ToString(row["FileName"]) ?? string.Empty,
-            FileData = row["FileData"] is byte[] bytes ? bytes : Array.Empty<byte>(),
-            FileSizeKB = Convert.ToInt32(row["FileSizeKB"])
-        };
-    }
-
     public static async Task DeleteAttachmentAsync(int attachmentId, int actingUserId)
     {
         await SqlHelper.ExecuteAsync("DeleteAttachment", true,
