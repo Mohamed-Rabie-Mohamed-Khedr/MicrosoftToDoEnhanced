@@ -79,21 +79,18 @@ public static class UserRepository
         return userId ?? throw new InvalidOperationException("The user could not be added.");
     }
 
-    public static async Task UpdatePasswordHashAsync(int userId, int actingUserId, string passwordHash)
+    public static async Task UpdatePasswordHashAsync(int userId, string passwordHash)
     {
         await SqlHelper.ExecuteAsync("UpdatePasswordHash", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId },
-            new SqlParameter("@ConfirmGroupImpact", SqlDbType.Bit) { Value = true });
-
+            new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash });
     }
 
-    public static async Task DeleteUserAsync(int userId, int actingUserId)
+    public static async Task DeleteUserAsync(int userId)
     {
         await SqlHelper.ExecuteAsync("DeleteUser", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            new SqlParameter("@ConfirmGroupImpact", SqlDbType.Bit) { Value = true });
     }
 
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
@@ -256,7 +253,7 @@ public static class UserRepository
 
         if (verification.NeedsRehash || !storedHash.StartsWith("pbkdf2", StringComparison.Ordinal))
         {
-            await UpdatePasswordHashAsync(user.UserID, user.UserID, PasswordHasher.Hash(password));
+            await UpdatePasswordHashAsync(user.UserID, PasswordHasher.Hash(password));
             return SignInResult.Migrated(user);
         }
 

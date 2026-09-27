@@ -228,7 +228,7 @@ public class GroupSettingsViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(NewPostContent))
             return;
 
-        await PostRepository.AddPostAsync(groupId, _currentUser.UserID, _currentUser.UserID, NewPostContent.Trim());
+        await PostRepository.AddPostAsync(groupId, _currentUser.UserID, NewPostContent.Trim());
         NewPostContent = string.Empty;
         OnPropertyChanged(nameof(NewPostContent));
         await LoadPostsAsync(groupId);

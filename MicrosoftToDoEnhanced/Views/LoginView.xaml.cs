@@ -3,7 +3,6 @@ using System.Net.Mail;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using Core.Repositories;
 using MicrosoftToDoEnhanced.Services;
 using MicrosoftToDoEnhanced.Themes;

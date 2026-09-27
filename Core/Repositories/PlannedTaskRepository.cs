@@ -58,7 +58,7 @@ public static class PlannedTaskRepository
         return rows.Select(r => new RepetitionType(r)).ToList();
     }
 
-    public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope, int actingUserId)
+    public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope)
     {
         var procedure = scope switch
         {
@@ -70,8 +70,7 @@ public static class PlannedTaskRepository
         };
 
         var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 }

@@ -36,15 +36,9 @@ namespace MicrosoftToDoEnhanced
             _ = InitializeViewModelAsync(viewModel);
         }
 
-        private static async System.Threading.Tasks.Task InitializeViewModelAsync(MainViewModel viewModel)
+        private static async Task InitializeViewModelAsync(MainViewModel viewModel)
         {
-            try
-            {
-                await viewModel.InitializeAsync();
-            }
-            catch (Exception)
-            {
-            }
+            await viewModel.InitializeAsync();
         }
 
         private void OnThemeToggled(object sender, RoutedEventArgs e)

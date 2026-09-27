@@ -140,12 +140,11 @@ public static class TaskRepository
             new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
     }
 
-    public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance, int actingUserId)
+    public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance)
     {
         var procedure = byImportance ? "GetTaskParentsByImportance" : "GetTaskParentsByRanking";
         var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
@@ -166,7 +165,7 @@ public static class TaskRepository
     }
 
     public static async Task ReorderTasksAsync(
-        int userId, int? groupId, IReadOnlyList<int> orderedTaskIds, int actingUserId)
+        int userId, int? groupId, IReadOnlyList<int> orderedTaskIds)
     {
         await SqlHelper.ExecuteAsync("ReorderTasks", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
@@ -174,8 +173,7 @@ public static class TaskRepository
             {
                 Value = groupId ?? (object)DBNull.Value
             },
-            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(orderedTaskIds)),
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", SqlHelper.BuildTaskIdTable(orderedTaskIds)));
     }
 
     public static async Task<List<TaskListExtras>> GetTaskListExtrasAsync(IReadOnlyList<int> taskIds, int actingUserId)
@@ -198,11 +196,10 @@ public static class TaskRepository
             GetString(r, "RepetitionName"))).ToList();
     }
 
-    public static async Task<TaskCounts> GetTaskCountsAsync(int userId, int actingUserId, bool includeCompleted)
+    public static async Task<TaskCounts> GetTaskCountsAsync(int userId, bool includeCompleted)
     {
         var rows = await SqlHelper.QueryAsync("GetTaskCounts", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId },
             new SqlParameter("@IncludeCompleted", SqlDbType.Bit) { Value = includeCompleted });
 
         if (rows.Count == 0)

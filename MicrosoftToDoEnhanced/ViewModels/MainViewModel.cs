@@ -248,7 +248,7 @@ public class MainViewModel : ViewModelBase
 
     private async Task RefreshCountsAsync()
     {
-        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, CurrentUserId, includeCompleted: true);
+        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, includeCompleted: true);
 
         SetSmartViewCount(SmartViewKind.All, counts.AllCount);
         SetSmartViewCount(SmartViewKind.Important, counts.ImportantCount);
@@ -293,7 +293,7 @@ public class MainViewModel : ViewModelBase
             switch (_selectedSmartView?.Kind ?? SmartViewKind.All)
             {
                 case SmartViewKind.All:
-                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance, CurrentUserId));
+                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance));
                     CurrentViewTitle = "All";
                     break;
                 case SmartViewKind.Today:
@@ -305,7 +305,7 @@ public class MainViewModel : ViewModelBase
                     CurrentViewTitle = "Planned";
                     break;
                 case SmartViewKind.Important:
-                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance, CurrentUserId));
+                    _sourceTasks.AddRange(await TaskRepository.GetParentTasksAsync(CurrentUserId, _sortByImportance));
                     _sourceTasks = _sourceTasks.Where(t => t.LevelOfImportanceID == (int)TaskImportance.High).ToList();
                     CurrentViewTitle = "Important";
                     break;
@@ -342,7 +342,7 @@ public class MainViewModel : ViewModelBase
 
     private async Task LoadPlannedSourceAsync(PlannedScope scope)
     {
-        var tasks = await PlannedTaskRepository.GetTasksAsync(CurrentUserId, scope, CurrentUserId);
+        var tasks = await PlannedTaskRepository.GetTasksAsync(CurrentUserId, scope);
         foreach (var task in tasks)
         {
             if (_sourcePlanned.ContainsKey(task.TaskID) || _sourceTasks.Any(t => t.TaskID == task.TaskID))
@@ -558,7 +558,7 @@ public class MainViewModel : ViewModelBase
 
             var fullOrder = _sourceTasks.Select(t => t.TaskID).ToList();
             await TaskRepository.ReorderTasksAsync(
-                CurrentUserId, _selectedGroup?.GroupID, fullOrder, CurrentUserId);
+                CurrentUserId, _selectedGroup?.GroupID, fullOrder);
         }
         catch
         {
@@ -626,16 +626,7 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        try
-        {
-            await UserRepository.DeleteUserAsync(CurrentUserId, CurrentUserId);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            RaiseToast("You can only delete your own account.");
-            return;
-        }
-
+        await UserRepository.DeleteUserAsync(CurrentUserId);
         SignOutRequested?.Invoke(this, EventArgs.Empty);
     }
 }

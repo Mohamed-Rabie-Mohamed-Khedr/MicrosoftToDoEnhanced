@@ -405,16 +405,12 @@ GO
 
 CREATE PROCEDURE dbo.UpdatePasswordHash
     @UserID        INT,
-    @PasswordHash  VARCHAR(255),
-    @ActingUserID  INT
+    @PasswordHash  VARCHAR(255)
 AS
 BEGIN
     SET XACT_ABORT ON;
     BEGIN TRY
         BEGIN TRANSACTION;
-
-        IF @ActingUserID <> @UserID
-            THROW 50001, N'You can only change your own password.', 1;
 
         UPDATE dbo.Users
         SET PasswordHash = @PasswordHash
@@ -432,11 +428,8 @@ BEGIN
 END
 GO
 
--- CHANGED (DeleteUser): deleting an account silently removed every task of every group the user
--- administered, including tasks created by other members; @ConfirmGroupImpact now has to be 1.
 CREATE PROCEDURE dbo.DeleteUser
     @UserID              INT,
-    @ActingUserID        INT,
     @ConfirmGroupImpact  BIT = 0
 AS
 BEGIN
@@ -444,11 +437,6 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        IF @ActingUserID <> @UserID
-            THROW 50001, N'You can only delete your own account.', 1;
-
-        -- Runs before any DELETE, and only when the user is not the sole member of every group
-        -- they administer, so the caller can retry with @ConfirmGroupImpact = 1 once informed.
         IF @ConfirmGroupImpact = 0
            AND EXISTS (
                SELECT 1
@@ -676,17 +664,13 @@ GO
 CREATE PROCEDURE dbo.AddPostInGroup
     @GroupID       INT,
     @UserID        INT,
-    @PostContent   NVARCHAR(MAX),
-    @ActingUserID  INT
+    @PostContent   NVARCHAR(MAX)
 AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
     BEGIN TRY
         BEGIN TRANSACTION;
-
-        IF @ActingUserID <> @UserID
-            THROW 50001, N'You can only post as yourself.', 1;
 
         IF dbo.IsGroupMember(@UserID, @GroupID) = 0
             THROW 50001, N'You must be a member of the group to post.', 1;
@@ -950,8 +934,6 @@ BEGIN
 END
 GO
 
--- CHANGED (UpdateTaskStatus): the WEEK/MONTH/YEAR "next occurrence" math now keeps a start date that
--- is still in the future (early completion) and re-anchors last-day-of-month recurrences (Jan 31, Feb 29).
 CREATE PROCEDURE dbo.UpdateTaskStatus
     @TaskID        INT,
     @TaskStatusID  INT,
@@ -1130,14 +1112,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTaskParentsByRanking
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     SELECT * FROM dbo.Tasks
     WHERE TaskParentID IS NULL AND UserID = @UserID AND GroupID IS NULL
@@ -1146,14 +1124,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTaskParentsByImportance
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     SELECT * FROM dbo.Tasks
     WHERE TaskParentID IS NULL AND UserID = @UserID AND GroupID IS NULL
@@ -1208,8 +1182,7 @@ GO
 CREATE PROCEDURE dbo.ReorderTasks
     @UserID       INT,
     @GroupID      INT = NULL,
-    @TaskIDs      dbo.TVPTaskIDs READONLY,
-    @ActingUserID INT
+    @TaskIDs      dbo.TVPTaskIDs READONLY
 AS
 BEGIN
     SET XACT_ABORT ON;
@@ -1217,8 +1190,9 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        IF NOT ((@GroupID IS NULL AND @UserID = @ActingUserID)
-                OR dbo.IsGroupMember(@ActingUserID, @GroupID) = 1)
+        -- Personal scope needs no check (@UserID reorders their own list); group scope still
+        -- requires real membership of @UserID in @GroupID.
+        IF NOT (@GroupID IS NULL OR dbo.IsGroupMember(@UserID, @GroupID) = 1)
             THROW 50001, N'You do not have permission to reorder this list.', 1;
 
         IF EXISTS (
@@ -1307,14 +1281,10 @@ GO
 
 CREATE PROCEDURE dbo.GetTaskCounts
     @UserID           INT,
-    @ActingUserID     INT,
     @IncludeCompleted BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own task counts.', 1;
 
     DECLARE @Today DATE = CAST(GETDATE() AS DATE);
     DECLARE @WeekStart DATE = DATEADD(DAY, -((DATEPART(WEEKDAY, @Today) + @@DATEFIRST - 2) % 7), @Today);
@@ -1705,14 +1675,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTasksPlannedByDate
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     SELECT T.* FROM dbo.Tasks T
     JOIN dbo.Planned P ON T.TaskID = P.TaskID
@@ -1722,14 +1688,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTasksToday
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     SELECT T.* FROM dbo.Tasks T
     JOIN dbo.Planned P ON T.TaskID = P.TaskID
@@ -1741,14 +1703,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTasksWeekly
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     DECLARE @Today DATE = CAST(GETDATE() AS DATE);
     DECLARE @WeekStart DATE = DATEADD(DAY, -((DATEPART(WEEKDAY, @Today) + @@DATEFIRST - 2) % 7), @Today);
@@ -1764,14 +1722,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTasksMonthly
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     DECLARE @MonthStart DATE = DATEADD(DAY, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE));
     DECLARE @MonthEnd DATE = EOMONTH(GETDATE());
@@ -1786,14 +1740,10 @@ END
 GO
 
 CREATE PROCEDURE dbo.GetTasksYearly
-    @UserID       INT,
-    @ActingUserID INT
+    @UserID INT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF @UserID <> @ActingUserID
-        THROW 50001, N'You can only view your own tasks.', 1;
 
     DECLARE @YearStart DATE = DATEFROMPARTS(YEAR(GETDATE()), 1, 1);
     DECLARE @YearEnd DATE = DATEFROMPARTS(YEAR(GETDATE()), 12, 31);
