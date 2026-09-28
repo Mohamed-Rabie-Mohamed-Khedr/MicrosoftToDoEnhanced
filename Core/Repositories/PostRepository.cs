@@ -14,8 +14,6 @@ public sealed record PostFeedItem(
     string UserName,
     string ShowName,
     string UserColor,
-    int LikeCount,
-    bool LikedByMe,
     bool IsMine);
 
 public static class PostRepository
@@ -52,8 +50,6 @@ public static class PostRepository
             Convert.ToString(r["UserName"]) ?? string.Empty,
             Convert.ToString(r["ShowName"]) ?? string.Empty,
             Convert.ToString(r["UserColor"]) ?? string.Empty,
-            Convert.ToInt32(r["LikeCount"]),
-            Convert.ToBoolean(r["LikedByMe"]),
             Convert.ToBoolean(r["IsMine"]))).ToList();
     }
 }

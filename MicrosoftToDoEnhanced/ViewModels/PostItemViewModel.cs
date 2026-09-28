@@ -17,7 +17,5 @@ public class PostItemViewModel
     public string AuthorColor => FeedItem.UserColor;
     public DateTime PostDate => FeedItem.PostDate;
     public string PostContent => FeedItem.PostContent;
-    public int LikeCount => FeedItem.LikeCount;
-    public bool LikedByMe => FeedItem.LikedByMe;
     public bool IsMine => FeedItem.IsMine;
 }
