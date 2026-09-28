@@ -2,26 +2,23 @@ using System.Windows.Input;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
-public class RelayCommand : ICommand
+/// <summary>
+/// Parameterless overload, expressed as an adapter over <see cref="RelayCommand{T}"/>
+/// that discards the command parameter. All behaviour lives in the generic version.
+/// </summary>
+public class RelayCommand : RelayCommand<object?>
 {
-    private readonly Action _execute;
-    private readonly Func<bool>? _canExecute;
-
     public RelayCommand(Action execute, Func<bool>? canExecute = null)
+        : base(Disregarding(execute), canExecute is null ? null : _ => canExecute())
     {
-        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        _canExecute = canExecute;
     }
 
-    public event EventHandler? CanExecuteChanged
+    private static Action<object?> Disregarding(Action execute)
     {
-        add => CommandManager.RequerySuggested += value;
-        remove => CommandManager.RequerySuggested -= value;
+        if (execute is null)
+            throw new ArgumentNullException(nameof(execute));
+        return _ => execute();
     }
-
-    public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
-
-    public void Execute(object? parameter) => _execute();
 }
 
 public class RelayCommand<T> : ICommand
@@ -48,53 +45,23 @@ public class RelayCommand<T> : ICommand
         _execute(parameter is T value ? value : default);
 }
 
-public class AsyncRelayCommand : ICommand
+/// <summary>
+/// Parameterless overload, expressed as an adapter over <see cref="AsyncRelayCommand{T}"/>
+/// that discards the command parameter. All behaviour lives in the generic version.
+/// </summary>
+public class AsyncRelayCommand : AsyncRelayCommand<object?>
 {
-    private readonly Func<Task> _execute;
-    private readonly Func<bool>? _canExecute;
-    private readonly Action<Exception>? _onError;
-    private bool _isRunning;
-
     public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null, Action<Exception>? onError = null)
+        : base(Disregarding(execute), canExecute is null ? null : _ => canExecute(), onError)
     {
-        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        _canExecute = canExecute;
-        _onError = onError;
     }
 
-    public event EventHandler? CanExecuteChanged
+    private static Func<object?, Task> Disregarding(Func<Task> execute)
     {
-        add => CommandManager.RequerySuggested += value;
-        remove => CommandManager.RequerySuggested -= value;
+        if (execute is null)
+            throw new ArgumentNullException(nameof(execute));
+        return _ => execute();
     }
-
-    public bool CanExecute(object? parameter) =>
-        !_isRunning && (_canExecute?.Invoke() ?? true);
-
-    public async void Execute(object? parameter)
-    {
-        if (_isRunning)
-            return;
-
-        _isRunning = true;
-        RaiseCanExecuteChanged();
-        try
-        {
-            await _execute();
-        }
-        catch (Exception exception)
-        {
-            _onError?.Invoke(exception);
-        }
-        finally
-        {
-            _isRunning = false;
-            RaiseCanExecuteChanged();
-        }
-    }
-
-    private void RaiseCanExecuteChanged() =>
-        CommandManager.InvalidateRequerySuggested();
 }
 
 public class AsyncRelayCommand<T> : ICommand

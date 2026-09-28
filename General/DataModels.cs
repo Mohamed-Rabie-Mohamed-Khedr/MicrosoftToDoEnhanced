@@ -2,20 +2,6 @@ using System.Data;
 
 namespace General.Models;
 
-public class Permission
-{
-    public int PermissionID { get; set; }
-    public string PermissionName { get; set; } = string.Empty;
-
-    public Permission() { }
-
-    public Permission(DataRow dr)
-    {
-        PermissionID = Convert.ToInt32(dr["PermissionID"]);
-        PermissionName = dr["PermissionName"].ToString() ?? string.Empty;
-    }
-}
-
 public class User
 {
     public int UserID { get; set; }
@@ -61,42 +47,6 @@ public class Group
         if (dr["GroupDescription"] != DBNull.Value)
             GroupDescription = dr["GroupDescription"].ToString();
         Color = dr["Color"].ToString() ?? string.Empty;
-    }
-}
-
-public class GroupMember
-{
-    public int GroupMemberID { get; set; }
-    public int GroupID { get; set; }
-    public int UserID { get; set; }
-
-    public GroupMember() { }
-
-    public GroupMember(DataRow dr)
-    {
-        GroupMemberID = Convert.ToInt32(dr["GroupMemberID"]);
-        GroupID = Convert.ToInt32(dr["GroupID"]);
-        UserID = Convert.ToInt32(dr["UserID"]);
-    }
-}
-
-public class PostInGroup
-{
-    public int PostID { get; set; }
-    public int GroupID { get; set; }
-    public int UserID { get; set; }
-    public string PostContent { get; set; } = string.Empty;
-    public DateTime PostDate { get; set; }
-
-    public PostInGroup() { }
-
-    public PostInGroup(DataRow dr)
-    {
-        PostID = Convert.ToInt32(dr["PostID"]);
-        GroupID = Convert.ToInt32(dr["GroupID"]);
-        UserID = Convert.ToInt32(dr["UserID"]);
-        PostContent = dr["PostContent"].ToString() ?? string.Empty;
-        PostDate = Convert.ToDateTime(dr["PostDate"]);
     }
 }
 

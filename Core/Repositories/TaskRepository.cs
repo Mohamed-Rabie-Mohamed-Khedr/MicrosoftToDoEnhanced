@@ -17,15 +17,6 @@ public sealed record TaskListExtras(
     int? RepetitionTypeID,
     string? RepetitionName);
 
-public sealed record TaskDetailBundle(
-    DataRow Task,
-    List<TodoTask> Steps,
-    List<Attachment> Attachments,
-    List<User> Assignees,
-    bool CanManage,
-    string OwnerName,
-    string OwnerColor);
-
 public sealed record TaskCounts(
     int AllCount,
     int TodayCount,
@@ -276,12 +267,6 @@ public static class TaskRepository
         return new LookupBundle(statuses, levels, repetitions, users);
     }
 
-    public static async Task<List<TodoTaskStatus>> GetTaskStatusesAsync() =>
-        (await GetLookupsAsync()).Statuses;
-
-    public static async Task<List<LevelOfImportance>> GetImportanceLevelsAsync() =>
-        (await GetLookupsAsync()).Levels;
-
     private static User ToLookupUser(DataRow row) =>
         new()
         {
@@ -292,16 +277,6 @@ public static class TaskRepository
             PasswordHash = string.Empty,
             PermissionID = 1,
             Color = GetString(row, "Color") ?? string.Empty
-        };
-
-    private static Attachment ToAttachment(DataRow row) =>
-        new()
-        {
-            AttachmentID = Convert.ToInt32(row["AttachmentID"]),
-            TaskID = Convert.ToInt32(row["TaskID"]),
-            FileName = GetString(row, "FileName") ?? string.Empty,
-            FileData = Array.Empty<byte>(),
-            FileSizeKB = Convert.ToInt32(row["FileSizeKB"])
         };
 
     private static string? GetString(DataRow row, string column) =>

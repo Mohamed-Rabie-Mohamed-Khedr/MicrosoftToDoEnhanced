@@ -7,6 +7,8 @@ namespace MicrosoftToDoEnhanced.Controls;
 
 public partial class TaskItem : UserControl
 {
+    private const string DragFormat = "MicrosoftToDoEnhanced.TaskItem.DragSource";
+
     public static readonly RoutedEvent ReorderRequestedEvent = EventManager.RegisterRoutedEvent(
         nameof(ReorderRequested), RoutingStrategy.Bubble, typeof(RoutedPropertyChangedEventHandler<object>), typeof(TaskItem));
 
@@ -19,8 +21,10 @@ public partial class TaskItem : UserControl
     public TaskItem()
     {
         InitializeComponent();
+        AllowDrop = true;
         DragGrip.PreviewMouseLeftButtonDown += OnDragGripPressed;
-        Drop += OnDrop;
+        Root.DragOver += OnDragOver;
+        Root.Drop += OnDrop;
     }
 
     private void OnItemClicked(object sender, MouseButtonEventArgs e)
@@ -39,23 +43,51 @@ public partial class TaskItem : UserControl
 
     private void OnDragGripPressed(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is null || !ReorderAllowed(DataContext))
+        if (DataContext is not ViewModels.TodoTaskViewModel task || !task.CanReorder)
         {
             e.Handled = true;
             return;
         }
 
-        DragDrop.DoDragDrop(this, new DataObject(typeof(object), DataContext), DragDropEffects.Move);
+        var payload = new DataObject(DragFormat, task);
+        DragDrop.DoDragDrop(this, payload, DragDropEffects.Move);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Without this, DragOver leaves e.Effects at None and WPF never raises Drop.
+    /// </summary>
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = AcceptsDrop(e) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private bool AcceptsDrop(DragEventArgs e) =>
+        TryGetDraggedTask(e, out var dragged)
+        && ReorderAllowed(DataContext)
+        && !ReferenceEquals(dragged, DataContext);
+
+    private static bool TryGetDraggedTask(DragEventArgs e, out ViewModels.TodoTaskViewModel dragged)
+    {
+        dragged = null!;
+        if (!e.Data.GetDataPresent(DragFormat))
+            return false;
+
+        if (e.Data.GetData(DragFormat) is not ViewModels.TodoTaskViewModel task)
+            return false;
+
+        dragged = task;
+        return true;
     }
 
     private void OnDrop(object sender, DragEventArgs e)
     {
-        if (!ReorderAllowed(DataContext))
+        if (!TryGetDraggedTask(e, out var dragged))
             return;
 
-        if (e.Data.GetData(typeof(object)) is not { } dragged) return;
-        if (ReferenceEquals(dragged, DataContext)) return;
+        if (!ReorderAllowed(DataContext) || ReferenceEquals(dragged, DataContext))
+            return;
 
         RaiseEvent(new RoutedPropertyChangedEventArgs<object>(dragged, DataContext, ReorderRequestedEvent));
         e.Handled = true;

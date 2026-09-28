@@ -24,8 +24,6 @@ public class TodoTaskViewModel : ViewModelBase
     private User? _selectedAssignee;
     private string? _newStepTitle;
     private PlannedTask? _planned;
-    private int? _assignedId;
-    private int? _assignedToUserId;
     private bool _detailsLoaded;
 
     public TodoTaskViewModel(
@@ -118,8 +116,6 @@ public class TodoTaskViewModel : ViewModelBase
 
     public string? LevelName =>
         _levelNames.GetValueOrDefault(_model.LevelOfImportanceID);
-
-    public string? LevelColor => null;
 
     private bool _canReorder = true;
 
@@ -293,7 +289,6 @@ public class TodoTaskViewModel : ViewModelBase
 
         if (extras.AssignedToUserID is int assignedUserId && extras.AssignedToName is not null)
         {
-            _assignedToUserId = assignedUserId;
             SelectedAssignee = Assignees.FirstOrDefault(u => u.UserID == assignedUserId)
                 ?? new User
                 {
@@ -332,12 +327,10 @@ public class TodoTaskViewModel : ViewModelBase
         if (assigned.Count == 0)
             return;
 
-        _assignedId = assigned[0].AssignedID;
         var assignee = await AssignedTaskRepository.GetAssignedUserAsync(TaskID, _owner.CurrentUserId);
         if (assignee is null)
             return;
 
-        _assignedToUserId = assignee.UserID;
         SelectedAssignee = Assignees.FirstOrDefault(u => u.UserID == assignee.UserID) ?? assignee;
     }
 

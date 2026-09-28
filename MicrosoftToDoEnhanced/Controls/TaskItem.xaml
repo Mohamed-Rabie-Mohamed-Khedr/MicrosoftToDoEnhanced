@@ -49,6 +49,7 @@
             </Grid.ColumnDefinitions>
 
             <Grid x:Name="DragGrip" Grid.Column="0" Width="16" VerticalAlignment="Center" Margin="-4,0,4,0"
+                  Background="Transparent"
                   Cursor="SizeAll" ToolTip="Drag to reorder"
                   Visibility="{Binding CanReorder, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Path Width="8" Height="14" Stretch="Uniform" Fill="{DynamicResource TextTertiaryBrush}"

@@ -51,11 +51,37 @@ public static class PlannedTaskRepository
         return rows.Count == 0 ? null : new PlannedTask(rows[0]);
     }
 
-    public static async Task<List<RepetitionType>> GetRepetitionTypesAsync()
+    /// <summary>
+    /// Fetches the most recent Planned record for each taskId in a single query.
+    /// Equivalent to calling GetPlannedAsync in a loop, but without N round-trips.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<int, PlannedTask>> GetPlannedForTasksAsync(
+        IReadOnlyList<int> taskIds)
     {
+        var dict = new Dictionary<int, PlannedTask>(taskIds.Count);
+        if (taskIds.Count == 0)
+            return dict;
+
+        var tvp = SqlHelper.BuildTaskIdTable(taskIds);
         var rows = await SqlHelper.QueryAsync(
-            "SELECT * FROM RepetitionTypes ORDER BY RepetitionTypeID", false);
-        return rows.Select(r => new RepetitionType(r)).ToList();
+            @"SELECT p.*
+              FROM Planned p
+              INNER JOIN @TaskIDs tvp ON p.TaskID = tvp.TaskID
+              WHERE NOT EXISTS (
+                  SELECT 1
+                  FROM Planned p2
+                  WHERE p2.TaskID = p.TaskID
+                    AND p2.PlannedStartDate > p.PlannedStartDate
+              )", false,
+            SqlHelper.Tvp("@TaskIDs", "TVPTaskIDs", tvp));
+
+        foreach (DataRow row in rows)
+        {
+            var planned = new PlannedTask(row);
+            dict[planned.TaskID] = planned;
+        }
+
+        return dict;
     }
 
     public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope)

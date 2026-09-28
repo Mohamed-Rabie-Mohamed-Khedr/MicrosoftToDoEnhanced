@@ -92,26 +92,24 @@ internal static class SqlHelper
     }
 
 
-    public static DataTable BuildTaskIdTable(IReadOnlyList<int> taskIds)
+    public static DataTable BuildTaskIdTable(IReadOnlyList<int> taskIds) =>
+        BuildIdTable("TaskID", taskIds);
+
+    public static DataTable BuildUserIdTable(IReadOnlyList<int> userIds) =>
+        BuildIdTable("UserID", userIds);
+
+    /// <summary>
+    /// Both TVP shapes are (Id, SortOrder); only the id column name differs,
+    /// and each must match its SQL type declaration (TVPTaskIDs / TVPUserIDs).
+    /// </summary>
+    private static DataTable BuildIdTable(string idColumn, IReadOnlyList<int> ids)
     {
         var table = new DataTable();
-        table.Columns.Add("TaskID", typeof(int));
+        table.Columns.Add(idColumn, typeof(int));
         table.Columns.Add("SortOrder", typeof(int));
 
-        for (var i = 0; i < taskIds.Count; i++)
-            table.Rows.Add(taskIds[i], i + 1);
-
-        return table;
-    }
-
-    public static DataTable BuildUserIdTable(IReadOnlyList<int> userIds)
-    {
-        var table = new DataTable();
-        table.Columns.Add("UserID", typeof(int));
-        table.Columns.Add("SortOrder", typeof(int));
-
-        for (var i = 0; i < userIds.Count; i++)
-            table.Rows.Add(userIds[i], i + 1);
+        for (var i = 0; i < ids.Count; i++)
+            table.Rows.Add(ids[i], i + 1);
 
         return table;
     }

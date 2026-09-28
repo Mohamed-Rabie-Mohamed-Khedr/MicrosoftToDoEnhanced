@@ -6,21 +6,6 @@ namespace Core.Repositories;
 
 public static class AssignedTaskRepository
 {
-    public static async Task AddAsync(int taskId, int toUserId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("AddAssignTask", true,
-            new SqlParameter("@TaskID", SqlDbType.Int) { Value = taskId },
-            new SqlParameter("@ToUserID", SqlDbType.Int) { Value = toUserId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
-    public static async Task DeleteAsync(int assignedId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("DeleteAssignedTask", true,
-            new SqlParameter("@AssignedID", SqlDbType.Int) { Value = assignedId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task<List<AssignedTask>> GetByTaskAsync(int taskId, int actingUserId)
     {
         var rows = await SqlHelper.QueryAsync(

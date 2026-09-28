@@ -12,7 +12,6 @@
     <Color x:Key="InputBackgroundColor">#FFFFFF</Color>
     <Color x:Key="InputBorderColor">#D1D1D1</Color>
     <Color x:Key="ChipBackgroundColor">#EFEFEF</Color>
-    <Color x:Key="SelectionBackgroundColor">#E2F0FB</Color>
 
     <Color x:Key="TextPrimaryColor">#1B1B1B</Color>
     <Color x:Key="TextSecondaryColor">#606060</Color>
@@ -31,7 +30,6 @@
     <Color x:Key="PriorityLowColor">#107C10</Color>
     <Color x:Key="StatusCompletedColor">#107C10</Color>
     <Color x:Key="StatusPendingColor">#CA5010</Color>
-    <Color x:Key="StatusNeutralColor">#8A8A8A</Color>
     <Color x:Key="ToastBackgroundColor">#1B1B1B</Color>
     <Color x:Key="ToastTextColor">#FFFFFF</Color>
 
@@ -46,7 +44,6 @@
     <SolidColorBrush x:Key="InputBackgroundBrush" Color="{StaticResource InputBackgroundColor}"/>
     <SolidColorBrush x:Key="InputBorderBrush" Color="{StaticResource InputBorderColor}"/>
     <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackgroundColor}"/>
-    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="{StaticResource SelectionBackgroundColor}"/>
 
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
@@ -65,7 +62,6 @@
     <SolidColorBrush x:Key="PriorityLowBrush" Color="{StaticResource PriorityLowColor}"/>
     <SolidColorBrush x:Key="StatusCompletedBrush" Color="{StaticResource StatusCompletedColor}"/>
     <SolidColorBrush x:Key="StatusPendingBrush" Color="{StaticResource StatusPendingColor}"/>
-    <SolidColorBrush x:Key="StatusNeutralBrush" Color="{StaticResource StatusNeutralColor}"/>
     <SolidColorBrush x:Key="ToastBackgroundBrush" Color="{StaticResource ToastBackgroundColor}"/>
     <SolidColorBrush x:Key="ToastTextBrush" Color="{StaticResource ToastTextColor}"/>
 </ResourceDictionary>

@@ -40,9 +40,6 @@ public static class ThemeManager
         ApplyAccent(CurrentAccentHex);
     }
 
-    public static void Toggle() =>
-        ApplyTheme(CurrentTheme == AppTheme.Dark ? AppTheme.Light : AppTheme.Dark);
-
     public static void ApplyAccentColor(string hexColor)
     {
         if (string.IsNullOrWhiteSpace(hexColor) || !TryParseColor(hexColor, out _))

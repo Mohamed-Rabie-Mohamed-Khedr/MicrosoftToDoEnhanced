@@ -1,10 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using Core.Repositories;
 using MicrosoftToDoEnhanced.Services;
-using MicrosoftToDoEnhanced.Views;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
@@ -220,21 +218,32 @@ public class MainViewModel : ViewModelBase
     public async Task RefreshAfterMutationAsync() =>
         await RefreshSourceAndViewAsync();
 
+    /// <summary>
+    /// One GetLookups round trip feeds statuses, importance levels and repetition types.
+    /// Those values used to arrive via three separate queries, two of which re-issued
+    /// this same proc and discarded the repetition types it had already returned.
+    /// RepetitionType exposes only the two columns the proc selects, in the same
+    /// RepetitionTypeID order, so the options are unchanged.
+    /// Assignees deliberately keep using GetAllUsersAsync: the bundle's user rows are a
+    /// reduced projection, not the full user record.
+    /// </summary>
     private async Task LoadLookupsAsync()
     {
+        var lookups = await TaskRepository.GetLookupsAsync();
+
         _statusNames.Clear();
-        foreach (var status in await TaskRepository.GetTaskStatusesAsync())
+        foreach (var status in lookups.Statuses)
             _statusNames[status.TaskStatusID] = status.StatusName;
 
         _levelNames.Clear();
-        foreach (var level in await TaskRepository.GetImportanceLevelsAsync())
+        foreach (var level in lookups.Levels)
             _levelNames[level.LevelOfImportanceID] = level.LevelName;
 
         _assignees.Clear();
         _assignees.AddRange(await UserRepository.GetAllUsersAsync());
 
         _recurrenceOptions.Clear();
-        foreach (var type in await PlannedTaskRepository.GetRepetitionTypesAsync())
+        foreach (var type in lookups.RepetitionTypes)
             _recurrenceOptions.Add(new RecurrenceOption(type));
     }
 
@@ -343,13 +352,20 @@ public class MainViewModel : ViewModelBase
     private async Task LoadPlannedSourceAsync(PlannedScope scope)
     {
         var tasks = await PlannedTaskRepository.GetTasksAsync(CurrentUserId, scope);
-        foreach (var task in tasks)
-        {
-            if (_sourcePlanned.ContainsKey(task.TaskID) || _sourceTasks.Any(t => t.TaskID == task.TaskID))
-                continue;
+        if (tasks.Count == 0)
+            return;
 
-            var planned = await PlannedTaskRepository.GetPlannedAsync(task.TaskID);
-            if (planned is null)
+        var seen = new HashSet<int>(_sourceTasks.Select(t => t.TaskID));
+        var pending = tasks
+            .Where(t => seen.Add(t.TaskID))
+            .ToList();
+
+        var plannedByTask = await PlannedTaskRepository.GetPlannedForTasksAsync(
+            pending.Select(t => t.TaskID).ToList());
+
+        foreach (var task in pending)
+        {
+            if (!plannedByTask.TryGetValue(task.TaskID, out var planned))
                 continue;
 
             _sourceTasks.Add(task);
@@ -525,13 +541,28 @@ public class MainViewModel : ViewModelBase
         var target = payload.Target;
         var fromIndex = Tasks.IndexOf(dragged);
         var targetIndex = Tasks.IndexOf(target);
-        if (fromIndex < 0 || targetIndex < 0 || fromIndex == targetIndex)
+
+        // These used to bail out silently, which made a failed reorder look
+        // exactly like a failed drag. Say what went wrong instead.
+        if (fromIndex < 0 || targetIndex < 0)
+        {
+            RaiseToast("The list changed while you were dragging. Try again.");
             return;
+        }
+
+        if (fromIndex == targetIndex)
+        {
+            RaiseToast("That task is already in that position.");
+            return;
+        }
 
         var fullFrom = _sourceTasks.FindIndex(t => t.TaskID == dragged.TaskID);
         var insertAt = _sourceTasks.FindIndex(t => t.TaskID == target.TaskID);
         if (fullFrom < 0 || insertAt < 0)
+        {
+            RaiseToast("That task is not part of the current list, so it cannot be reordered.");
             return;
+        }
 
         var draggedTask = _sourceTasks[fullFrom];
         var draggedViewModel = _sourceViewModels[fullFrom];
@@ -541,17 +572,22 @@ public class MainViewModel : ViewModelBase
 
         try
         {
+            // Insert relative to the target's position *after* the dragged item is
+            // removed. Inserting always before the target moves the item up; moving
+            // it down needs the slot after the target, otherwise a drop onto the
+            // next item lands it right back where it started.
+            var movingDown = targetIndex > fromIndex;
+
             Tasks.RemoveAt(fromIndex);
-            Tasks.Insert(Tasks.IndexOf(target), dragged);
+            Tasks.Insert(Tasks.IndexOf(target) + (movingDown ? 1 : 0), dragged);
 
             _sourceTasks.RemoveAt(fullFrom);
             _sourceViewModels.RemoveAt(fullFrom);
 
-            if (fullFrom < insertAt)
-                insertAt--;
+            var destination = _sourceTasks.FindIndex(t => t.TaskID == target.TaskID) + (movingDown ? 1 : 0);
 
-            _sourceTasks.Insert(insertAt, draggedTask);
-            _sourceViewModels.Insert(insertAt, draggedViewModel);
+            _sourceTasks.Insert(destination, draggedTask);
+            _sourceViewModels.Insert(destination, draggedViewModel);
 
             for (var i = 0; i < _sourceTasks.Count; i++)
                 _sourceTasks[i].Ranking = i + 1;
@@ -580,27 +616,26 @@ public class MainViewModel : ViewModelBase
 
         var dialogGroupId = await GroupDialogService.ShowAsync(_window, this, group);
 
-        var selectedGroupId = dialogGroupId ?? _selectedGroup?.GroupID;
-        await RefreshGroupsAsync();
-        if (selectedGroupId is int groupId && Groups.FirstOrDefault(g => g.GroupID == groupId) is { } refreshed)
-        {
-            SelectedGroup = refreshed;
-        }
-        else
-        {
-            SelectedGroup = null;
-            await RefreshSourceAndViewAsync();
-        }
+        await SelectGroupOrResetAsync(dialogGroupId ?? _selectedGroup?.GroupID);
     }
 
     private async Task CreateGroupAsync()
     {
         var createdGroupId = await GroupDialogService.ShowAsync(_window, this);
 
+        await SelectGroupOrResetAsync(createdGroupId);
+    }
+
+    /// <summary>
+    /// Shared tail of the create/edit group flows: reload the group list, then either
+    /// select the group the dialog settled on, or fall back to the All view.
+    /// </summary>
+    private async Task SelectGroupOrResetAsync(int? groupId)
+    {
         await RefreshGroupsAsync();
-        if (createdGroupId is int groupId && Groups.FirstOrDefault(g => g.GroupID == groupId) is { } created)
+        if (groupId is int id && Groups.FirstOrDefault(g => g.GroupID == id) is { } group)
         {
-            SelectedGroup = created;
+            SelectedGroup = group;
         }
         else
         {
