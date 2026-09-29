@@ -14,7 +14,6 @@ public static class TaskExtensions
         }
         catch (Exception exception)
         {
-            AppLogger.LogError("Unhandled error in a background operation.", exception);
             (onError ?? ViewModelBase.DefaultErrorHandler)?.Invoke(exception);
         }
     }

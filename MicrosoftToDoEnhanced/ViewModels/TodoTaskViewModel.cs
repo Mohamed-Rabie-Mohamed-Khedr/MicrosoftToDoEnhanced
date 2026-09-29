@@ -54,7 +54,6 @@ public class TodoTaskViewModel : ViewModelBase
 
     private void OnAsyncCommandError(Exception exception)
     {
-        AppLogger.LogError($"Command execution failed for task {TaskID}.", exception);
         _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
             ? exception.Message
             : "Something went wrong. Please try again.");

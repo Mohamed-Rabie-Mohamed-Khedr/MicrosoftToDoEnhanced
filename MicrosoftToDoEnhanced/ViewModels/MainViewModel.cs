@@ -35,7 +35,7 @@ public class MainViewModel : ViewModelBase
     public MainViewModel(User user, Window window)
     {
         User = user;
-        CurrentUser = new UserViewModel(user);
+        CurrentUser = user;
         _window = window;
 
         SmartViews.Add(new SmartViewItem("All", "#707070", SmartViewKind.All));
@@ -59,7 +59,6 @@ public class MainViewModel : ViewModelBase
 
     private void OnAsyncCommandError(Exception exception)
     {
-        AppLogger.LogError("Command execution failed.", exception);
         RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
             ? exception.Message
             : "Something went wrong. Please try again.");
@@ -70,7 +69,7 @@ public class MainViewModel : ViewModelBase
 
     public User User { get; }
     public int CurrentUserId => User.UserID;
-    public UserViewModel CurrentUser { get; }
+    public User CurrentUser { get; }
 
     public ObservableCollection<SmartViewItem> SmartViews { get; } = new();
     public ObservableCollection<Group> Groups { get; } = new();

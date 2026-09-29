@@ -96,7 +96,6 @@ public sealed class LoginViewModel : ViewModelBase
 
     private void OnCommandError(Exception exception)
     {
-        AppLogger.LogError("Login view command", exception);
         LoginError = "Something went wrong. Please try again.";
     }
 
@@ -256,9 +255,8 @@ public sealed class LoginViewModel : ViewModelBase
 
             _onAuthenticated(result.User!);
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            AppLogger.LogError("Sign in", exception);
             LoginPassword = null;
             LoginError = "Could not sign in. Check the database connection and try again.";
         }
@@ -331,9 +329,8 @@ public sealed class LoginViewModel : ViewModelBase
             LoginInfoMessage = "Account created — sign in below.";
             IsRegisterMode = false;
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            AppLogger.LogError("Register", exception);
             RegisterUserNameError = "Could not create your account. Check the database connection and try again.";
         }
         finally

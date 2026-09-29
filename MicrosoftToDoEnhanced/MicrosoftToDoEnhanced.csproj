@@ -8,7 +8,6 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>MicrosoftToDoEnhanced</RootNamespace>
 		<AssemblyName>MicrosoftToDoEnhanced</AssemblyName>
-		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	</PropertyGroup>
 
 	<ItemGroup>

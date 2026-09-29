@@ -45,7 +45,7 @@ public class GroupSettingsViewModel : ViewModelBase
         Color = _workingGroup.Color;
 
         AddMemberCommand = new AsyncRelayCommand(AddMemberAsync, onError: OnCommandError);
-        RemoveMemberCommand = new AsyncRelayCommand<UserViewModel>(RemoveMemberAsync, onError: OnCommandError);
+        RemoveMemberCommand = new AsyncRelayCommand<User>(RemoveMemberAsync, onError: OnCommandError);
         DeleteGroupCommand = new AsyncRelayCommand(DeleteGroupAsync, onError: OnCommandError);
         SaveGroupCommand = new AsyncRelayCommand(SaveGroupAsync, onError: OnCommandError);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
@@ -55,7 +55,6 @@ public class GroupSettingsViewModel : ViewModelBase
 
     private void OnCommandError(Exception exception)
     {
-        AppLogger.LogError("Group settings command", exception);
         _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
             ? exception.Message
             : "Something went wrong. Please try again.");
@@ -96,7 +95,7 @@ public class GroupSettingsViewModel : ViewModelBase
         "#00B7C3", "#FF8C00", "#767676", "#000000"
     };
 
-    public ObservableCollection<UserViewModel> Members { get; } = new();
+    public ObservableCollection<User> Members { get; } = new();
     public ObservableCollection<PostItemViewModel> Posts { get; } = new();
 
     public string? NewMemberEmail { get; set; }
@@ -126,7 +125,7 @@ public class GroupSettingsViewModel : ViewModelBase
         var members = await GroupRepository.GetGroupMembersAsync(groupId, _currentUser.UserID);
         Members.Clear();
         foreach (var user in members)
-            Members.Add(new UserViewModel(user));
+            Members.Add(user);
     }
 
     private async Task AddMemberAsync()
@@ -163,7 +162,7 @@ public class GroupSettingsViewModel : ViewModelBase
         _owner.RaiseToast("Member added");
     }
 
-    private async Task RemoveMemberAsync(UserViewModel? member)
+    private async Task RemoveMemberAsync(User? member)
     {
         if (member is null || !IsOwner || _groupId is not int groupId)
             return;
