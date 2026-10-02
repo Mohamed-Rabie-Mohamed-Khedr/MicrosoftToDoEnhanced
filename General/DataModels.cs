@@ -57,14 +57,6 @@ public class TodoTaskStatus
     public string? StatusDescription { get; set; }
 
     public TodoTaskStatus() { }
-
-    public TodoTaskStatus(DataRow dr)
-    {
-        TaskStatusID = Convert.ToInt32(dr["TaskStatusID"]);
-        StatusName = dr["StatusName"].ToString() ?? string.Empty;
-        if (dr["StatusDescription"] != DBNull.Value)
-            StatusDescription = dr["StatusDescription"].ToString();
-    }
 }
 
 public class LevelOfImportance
@@ -74,13 +66,6 @@ public class LevelOfImportance
     public string Color { get; set; } = string.Empty;
 
     public LevelOfImportance() { }
-
-    public LevelOfImportance(DataRow dr)
-    {
-        LevelOfImportanceID = Convert.ToInt32(dr["LevelOfImportanceID"]);
-        LevelName = dr["LevelName"].ToString() ?? string.Empty;
-        Color = dr["Color"].ToString() ?? string.Empty;
-    }
 }
 
 public class TodoTask
@@ -96,8 +81,6 @@ public class TodoTask
     public string? Description { get; set; }
     public DateTime CreationDate { get; set; }
     public string Color { get; set; } = "#FFFFFF";
-
-    public TodoTask() { }
 
     public TodoTask(DataRow dr)
     {
@@ -131,35 +114,7 @@ public class Attachment
     public int AttachmentID { get; set; }
     public int TaskID { get; set; }
     public string FileName { get; set; } = string.Empty;
-    public byte[] FileData { get; set; } = Array.Empty<byte>();
     public int FileSizeKB { get; set; }
-
-    public Attachment() { }
-
-    public Attachment(DataRow dr)
-    {
-        AttachmentID = Convert.ToInt32(dr["AttachmentID"]);
-        TaskID = Convert.ToInt32(dr["TaskID"]);
-        FileName = dr["FileName"].ToString() ?? string.Empty;
-        FileData = dr["FileData"] as byte[] ?? Array.Empty<byte>();
-        FileSizeKB = Convert.ToInt32(dr["FileSizeKB"]);
-    }
-}
-
-public class AssignedTask
-{
-    public int AssignedID { get; set; }
-    public int TaskID { get; set; }
-    public int ToUserID { get; set; }
-
-    public AssignedTask() { }
-
-    public AssignedTask(DataRow dr)
-    {
-        AssignedID = Convert.ToInt32(dr["AssignedID"]);
-        TaskID = Convert.ToInt32(dr["TaskID"]);
-        ToUserID = Convert.ToInt32(dr["ToUserID"]);
-    }
 }
 
 public class RepetitionType
@@ -168,12 +123,6 @@ public class RepetitionType
     public string RepetitionName { get; set; } = string.Empty;
 
     public RepetitionType() { }
-
-    public RepetitionType(DataRow dr)
-    {
-        RepetitionTypeID = Convert.ToInt32(dr["RepetitionTypeID"]);
-        RepetitionName = dr["RepetitionName"].ToString() ?? string.Empty;
-    }
 }
 
 public class PlannedTask
@@ -183,8 +132,6 @@ public class PlannedTask
     public DateTime PlannedStartDate { get; set; }
     public DateTime? PlannedEndDate { get; set; }
     public int? RepetitionTypeID { get; set; }
-
-    public PlannedTask() { }
 
     public PlannedTask(DataRow dr)
     {
@@ -233,7 +180,6 @@ public static class DbLimits
     public const int MinUserNameLength = 1;
     public const int MaxUserNameLength = 100;
 
-    public const int MinShowNameLength = 1;
     public const int MaxShowNameLength = 100;
 
     public const int MaxEmailLength = 255;
@@ -241,11 +187,6 @@ public static class DbLimits
     public const int MaxPasswordHashLength = 255;
     public const int MinPasswordLength = 8;
     public const int MaxPasswordLength = 1024;
-
-    public const int MaxGroupNameLength = 100;
-    public const int MaxGroupDescriptionLength = int.MaxValue;
-
-    public const int MaxTaskNameLength = 100;
 
     public const int MaxFileNameLength = 260;
 

@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
@@ -14,17 +13,18 @@ public static class TaskExtensions
         }
         catch (Exception exception)
         {
-            (onError ?? ViewModelBase.DefaultErrorHandler)?.Invoke(exception);
+            onError?.Invoke(exception);
         }
     }
 }
 
 public abstract class ViewModelBase : INotifyPropertyChanged
 {
-    public static Action<Exception>? DefaultErrorHandler { get; set; }
     public event PropertyChangedEventHandler? PropertyChanged;
+
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -33,4 +33,9 @@ public abstract class ViewModelBase : INotifyPropertyChanged
         OnPropertyChanged(propertyName);
         return true;
     }
+
+    protected static string DescribeError(Exception exception) =>
+        string.IsNullOrWhiteSpace(exception.Message)
+            ? "Something went wrong. Please try again."
+            : exception.Message;
 }

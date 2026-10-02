@@ -15,8 +15,6 @@ public static class ThemeManager
     private const string DarkSource = "Themes/DarkTheme.xaml";
     private const string DefaultAccentHex = "#0078D4";
 
-    public static AppTheme CurrentTheme { get; private set; } = AppTheme.Light;
-
     public static string CurrentAccentHex { get; private set; } = DefaultAccentHex;
 
     public static void ApplyTheme(AppTheme theme)
@@ -35,7 +33,6 @@ public static class ThemeManager
         }
 
         app.Resources.MergedDictionaries.Insert(0, dictionary);
-        CurrentTheme = theme;
 
         ApplyAccent(CurrentAccentHex);
     }

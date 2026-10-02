@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows.Input;
 using Core.Repositories;
 using Microsoft.Win32;
-using MicrosoftToDoEnhanced.Services;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
@@ -52,17 +51,10 @@ public class TodoTaskViewModel : ViewModelBase
         SaveTaskCommand = new AsyncRelayCommand(SaveAsync, onError: OnAsyncCommandError);
     }
 
-    private void OnAsyncCommandError(Exception exception)
-    {
-        _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
-            ? exception.Message
-            : "Something went wrong. Please try again.");
-    }
-
-    public TodoTask Model => _model;
+    private void OnAsyncCommandError(Exception exception) =>
+        _owner.RaiseToast(DescribeError(exception));
 
     public int TaskID => _model.TaskID;
-    public int? TaskParentID => _model.TaskParentID;
     public DateTime CreationDate => _model.CreationDate;
     public int Ranking => _model.Ranking;
 
@@ -118,10 +110,6 @@ public class TodoTaskViewModel : ViewModelBase
 
     private bool _canReorder = true;
 
-    /// <summary>
-    /// Mirrors <see cref="MainViewModel.CanReorderTasks"/>; the list item hides its
-    /// drag handle when the current view's order is not the stored order.
-    /// </summary>
     public bool CanReorder
     {
         get => _canReorder;
@@ -298,6 +286,33 @@ public class TodoTaskViewModel : ViewModelBase
         }
     }
 
+    internal static async Task<TaskStatusResult?> ToggleStatusAsync(
+        TodoTaskViewModel task, int requested, int actingUserId, Action<string> toast, string forcedMessage)
+    {
+        var priorIsCompleted = !task.IsCompleted;
+
+        TaskStatusResult result;
+        try
+        {
+            result = await TaskRepository.UpdateTaskStatusAsync(task.TaskID, requested, actingUserId);
+        }
+        catch
+        {
+            task.IsCompleted = priorIsCompleted;
+            throw;
+        }
+
+        if (result.StatusForced)
+        {
+            task.IsCompleted = priorIsCompleted;
+            toast(forcedMessage);
+            return null;
+        }
+
+        task.IsCompleted = result.TaskStatusID == (int)TaskState.Completed;
+        return result;
+    }
+
     private async Task ReloadStepsAsync()
     {
         var children = await TaskRepository.GetChildTasksAsync(TaskID, _owner.CurrentUserId);
@@ -322,10 +337,6 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task LoadAssignedAsync()
     {
-        var assigned = await AssignedTaskRepository.GetByTaskAsync(TaskID, _owner.CurrentUserId);
-        if (assigned.Count == 0)
-            return;
-
         var assignee = await AssignedTaskRepository.GetAssignedUserAsync(TaskID, _owner.CurrentUserId);
         if (assignee is null)
             return;
@@ -359,7 +370,7 @@ public class TodoTaskViewModel : ViewModelBase
         NewStepTitle = string.Empty;
         await ReloadStepsAsync();
         _owner.RaiseToast("Step added");
-        await _owner.RefreshCountsOnlyAsync();
+        await _owner.RefreshCountsAsync();
     }
 
     private async Task ToggleStepAsync(TodoTaskViewModel? step)
@@ -368,32 +379,14 @@ public class TodoTaskViewModel : ViewModelBase
             return;
 
         var requested = step.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete;
-        var priorIsCompleted = !step.IsCompleted;
-
-        TaskStatusResult result;
-        try
-        {
-            result = await TaskRepository.UpdateTaskStatusAsync(
-                step.TaskID, requested, _owner.CurrentUserId);
-        }
-        catch
-        {
-            step.IsCompleted = priorIsCompleted;
-            throw;
-        }
-
-        if (result.StatusForced)
-        {
-            step.IsCompleted = priorIsCompleted;
-            _owner.RaiseToast("The step could not be changed as requested.");
+        var result = await ToggleStatusAsync(
+            step, requested, _owner.CurrentUserId, _owner.RaiseToast, "The step could not be changed as requested.");
+        if (result is null)
             return;
-        }
-
-        step.IsCompleted = result.TaskStatusID == (int)TaskState.Completed;
 
         UpdateStepsSummary();
         _owner.RaiseToast(step.IsCompleted ? "Step completed" : "Step marked incomplete");
-        await _owner.RefreshCountsOnlyAsync();
+        await _owner.RefreshCountsAsync();
     }
 
     private async Task RemoveStepAsync(TodoTaskViewModel? step)
@@ -405,7 +398,7 @@ public class TodoTaskViewModel : ViewModelBase
         Steps.Remove(step);
         UpdateStepsSummary();
         _owner.RaiseToast("Step removed");
-        await _owner.RefreshCountsOnlyAsync();
+        await _owner.RefreshCountsAsync();
     }
 
     private async Task AddAttachmentAsync()
@@ -439,7 +432,7 @@ public class TodoTaskViewModel : ViewModelBase
     {
         await TaskRepository.DeleteTaskAsync(TaskID, _owner.CurrentUserId);
         _owner.RaiseToast("Task deleted");
-        await _owner.RefreshAfterMutationAsync();
+        await _owner.RefreshSourceAndViewAsync();
     }
 
     private async Task SaveAsync()
@@ -465,6 +458,6 @@ public class TodoTaskViewModel : ViewModelBase
             _owner.CurrentUserId);
 
         _owner.RaiseToast("Task saved");
-        await _owner.RefreshAfterMutationAsync();
+        await _owner.RefreshSourceAndViewAsync();
     }
 }

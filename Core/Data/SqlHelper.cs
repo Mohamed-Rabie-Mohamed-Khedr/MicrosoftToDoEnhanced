@@ -1,3 +1,4 @@
+using System.Configuration;
 using System.Data;
 using Microsoft.Data.SqlClient;
 
@@ -5,6 +6,26 @@ namespace Core.Data;
 
 internal static class SqlHelper
 {
+    private const string ConnectionStringName = "MicrosoftToDoEnhanced";
+    private const string ConnectionStringEnvironmentVariable = "MICROSOFTTODOENHANCED_CONNECTIONSTRING";
+
+    private static SqlConnection CreateConnection() =>
+        new(GetConnectionString());
+
+    private static string GetConnectionString()
+    {
+        var fromEnvironment = Environment.GetEnvironmentVariable(ConnectionStringEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(fromEnvironment))
+            return fromEnvironment;
+
+        var settings = ConfigurationManager.ConnectionStrings[ConnectionStringName];
+        if (settings is null || string.IsNullOrWhiteSpace(settings.ConnectionString))
+            throw new InvalidOperationException(
+                $"Connection string '{ConnectionStringName}' was not found in the application configuration.");
+
+        return settings.ConnectionString;
+    }
+
     private static async Task<T> ExecuteCoreAsync<T>(
         string sql,
         bool storedProcedure,
@@ -13,7 +34,7 @@ internal static class SqlHelper
     {
         EnsureValidParameters(parameters);
 
-        await using var connection = DbConnectionFactory.CreateConnection();
+        await using var connection = CreateConnection();
         await connection.OpenAsync();
 
         using var command = new SqlCommand(sql, connection);
@@ -33,10 +54,7 @@ internal static class SqlHelper
 
     public static Task<IReadOnlyList<DataRow>> QueryAsync(
         string sql, bool storedProcedure = false, params SqlParameter[] parameters) =>
-        ExecuteCoreAsync(sql, storedProcedure, parameters, static command =>
-        {
-            return ReadResultSetAsync(command);
-        });
+        ExecuteCoreAsync(sql, storedProcedure, parameters, ReadResultSetAsync);
 
     private static async Task<IReadOnlyList<DataRow>> ReadResultSetAsync(SqlCommand command)
     {
@@ -68,7 +86,7 @@ internal static class SqlHelper
     {
         EnsureValidParameters(parameters);
 
-        var connection = DbConnectionFactory.CreateConnection();
+        var connection = CreateConnection();
         await connection.OpenAsync();
 
         var command = new SqlCommand(procedure, connection)
@@ -91,17 +109,12 @@ internal static class SqlHelper
         }
     }
 
-
     public static DataTable BuildTaskIdTable(IReadOnlyList<int> taskIds) =>
         BuildIdTable("TaskID", taskIds);
 
     public static DataTable BuildUserIdTable(IReadOnlyList<int> userIds) =>
         BuildIdTable("UserID", userIds);
 
-    /// <summary>
-    /// Both TVP shapes are (Id, SortOrder); only the id column name differs,
-    /// and each must match its SQL type declaration (TVPTaskIDs / TVPUserIDs).
-    /// </summary>
     private static DataTable BuildIdTable(string idColumn, IReadOnlyList<int> ids)
     {
         var table = new DataTable();
@@ -120,7 +133,6 @@ internal static class SqlHelper
             TypeName = $"dbo.{typeName}",
             Value = table
         };
-
 
     private static void EnsureValidParameters(SqlParameter[] parameters)
     {
@@ -144,7 +156,6 @@ internal static class SqlHelper
             }
         }
     }
-
 
     private static Exception Translate(SqlException exception)
     {
@@ -194,7 +205,7 @@ public sealed class MultiResultReader : IAsyncDisposable
         var table = new DataTable();
         var fieldCount = _reader.FieldCount;
         var values = new object[fieldCount];
-        for (int i = 0; i < fieldCount; i++)
+        for (var i = 0; i < fieldCount; i++)
             table.Columns.Add(_reader.GetName(i), _reader.GetFieldType(i));
 
         while (await _reader.ReadAsync())

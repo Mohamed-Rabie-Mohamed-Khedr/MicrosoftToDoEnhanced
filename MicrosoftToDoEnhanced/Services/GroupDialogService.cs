@@ -4,12 +4,7 @@ using MicrosoftToDoEnhanced.Views;
 
 namespace MicrosoftToDoEnhanced.Services;
 
-public interface IConfirmationService
-{
-    bool Confirm(string title, string message);
-}
-
-public sealed class MessageBoxConfirmationService : IConfirmationService
+public sealed class MessageBoxConfirmationService
 {
     public bool Confirm(string title, string message) =>
         MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
@@ -18,7 +13,7 @@ public sealed class MessageBoxConfirmationService : IConfirmationService
 
 public static class GroupDialogService
 {
-    public static readonly IConfirmationService Confirmation = new MessageBoxConfirmationService();
+    public static readonly MessageBoxConfirmationService Confirmation = new();
 
     public static async Task<int?> ShowAsync(Window ownerWindow, MainViewModel owner, Group? group = null)
     {

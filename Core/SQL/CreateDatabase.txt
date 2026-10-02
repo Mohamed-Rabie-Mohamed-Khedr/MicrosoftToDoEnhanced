@@ -1,4 +1,4 @@
-CREATE DATABASE MicrosoftToDoEnhanced;
+﻿CREATE DATABASE MicrosoftToDoEnhanced;
 GO
 
 USE MicrosoftToDoEnhanced;
@@ -238,25 +238,41 @@ BEGIN
 END
 GO
 
-CREATE FUNCTION dbo.GetSubtasks (@TaskID INT)
-RETURNS TABLE
+CREATE FUNCTION dbo.NextOccurrence (@Start DATETIME2, @RepetitionTypeID INT, @From DATETIME2)
+RETURNS DATETIME2
 AS
-RETURN
-(
-    SELECT T.TaskID,
-           T.TaskParentID,
-           T.TaskStatusID,
-           T.UserID,
-           T.GroupID,
-           T.Ranking,
-           T.TaskName,
-           T.LevelOfImportanceID,
-           T.Description,
-           T.CreationDate,
-           T.Color
-    FROM dbo.Tasks AS T
-    WHERE T.TaskParentID = @TaskID
-);
+BEGIN
+    DECLARE @n INT = CASE @RepetitionTypeID
+        WHEN 2 THEN DATEDIFF(DAY,   CAST(@Start AS DATE), CAST(@From AS DATE))
+        WHEN 3 THEN DATEDIFF(DAY,   CAST(@Start AS DATE), CAST(@From AS DATE)) / 7
+        WHEN 4 THEN DATEDIFF(MONTH, @Start, @From)
+        ELSE        DATEDIFF(YEAR,  @Start, @From) END;
+
+    IF @n < 1
+        SET @n = 1;
+
+    DECLARE @IsMonthEnd BIT = CASE WHEN @RepetitionTypeID >= 4 AND DAY(@Start) = DAY(EOMONTH(@Start)) THEN 1 ELSE 0 END;
+    DECLARE @Next DATETIME2;
+
+    WHILE 1 = 1
+    BEGIN
+        SET @Next = CASE @RepetitionTypeID
+            WHEN 2 THEN DATEADD(DAY,   @n, @Start)
+            WHEN 3 THEN DATEADD(WEEK,  @n, @Start)
+            WHEN 4 THEN DATEADD(MONTH, @n, @Start)
+            ELSE        DATEADD(YEAR,  @n, @Start) END;
+
+        IF @IsMonthEnd = 1
+            SET @Next = DATEADD(DAY, DATEDIFF(DAY, CAST(@Next AS DATE), EOMONTH(@Next)), @Next);
+
+        IF @Next >= @From
+            BREAK;
+
+        SET @n = @n + 1;
+    END
+
+    RETURN @Next;
+END
 GO
 
 CREATE PROCEDURE dbo.AddUser
@@ -270,7 +286,6 @@ AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
-    BEGIN TRANSACTION;
 
     IF dbo.UserExists(@UserName) = 1
         THROW 50003, N'This username is already taken.', 1;
@@ -279,9 +294,8 @@ BEGIN
     VALUES (@UserName, @ShowName,
             CASE WHEN NULLIF(LTRIM(RTRIM(@UserEmail)), N'') IS NULL THEN NULL
                  ELSE LOWER(LTRIM(RTRIM(@UserEmail))) END,
-            @PasswordHash, 1, @Color);
+            @PasswordHash, @PermissionID, @Color);
 
-    COMMIT TRANSACTION;
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
 END
 GO
@@ -291,74 +305,12 @@ CREATE PROCEDURE dbo.UpdatePasswordHash
     @PasswordHash  VARCHAR(255)
 AS
 BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
     UPDATE dbo.Users
     SET PasswordHash = @PasswordHash
     WHERE UserID = @UserID;
 
     IF @@ROWCOUNT = 0
         THROW 50002, N'User was not found.', 1;
-
-    COMMIT TRANSACTION;
-END
-GO
-
-CREATE PROCEDURE dbo.DeleteUser
-    @UserID              INT,
-    @ConfirmGroupImpact  BIT = 0
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
-    IF @ConfirmGroupImpact = 0
-       AND EXISTS (
-           SELECT 1
-           FROM dbo.Groups G
-           JOIN dbo.GroupMembers M ON M.GroupID = G.GroupID
-           WHERE G.AdminID = @UserID
-             AND M.UserID <> @UserID)
-        THROW 51001, N'Deleting this account also deletes tasks created by other members of the groups you administer. Call again with @ConfirmGroupImpact = 1 to confirm.', 1;
-
-    DECLARE @AdminGroups TABLE (GroupID INT PRIMARY KEY);
-    INSERT INTO @AdminGroups (GroupID)
-    SELECT GroupID FROM dbo.Groups WHERE AdminID = @UserID;
-
-    DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
-    INSERT INTO @TasksToDelete (TaskID)
-    SELECT TaskID FROM dbo.Tasks
-    WHERE UserID = @UserID OR GroupID IN (SELECT GroupID FROM @AdminGroups);
-
-    DECLARE @RowsAdded INT = 1;
-    WHILE @RowsAdded > 0
-    BEGIN
-        INSERT INTO @TasksToDelete (TaskID)
-        SELECT T.TaskID FROM dbo.Tasks T
-        JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
-        WHERE NOT EXISTS (SELECT 1 FROM @TasksToDelete X WHERE X.TaskID = T.TaskID);
-
-        SET @RowsAdded = @@ROWCOUNT;
-    END
-
-    DELETE FROM dbo.Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
-    DELETE FROM dbo.Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
-    DELETE FROM dbo.Planned     WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
-    DELETE FROM dbo.Tasks       WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
-
-    DELETE FROM dbo.PostsInGroups WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
-    DELETE FROM dbo.GroupMembers  WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
-    DELETE FROM dbo.Groups        WHERE GroupID IN (SELECT GroupID FROM @AdminGroups);
-
-    DELETE FROM dbo.PostsInGroups WHERE UserID = @UserID;
-
-    DELETE FROM dbo.GroupMembers  WHERE UserID = @UserID;
-    DELETE FROM dbo.Assigned      WHERE ToUserID = @UserID;
-
-    DELETE FROM dbo.Users WHERE UserID = @UserID;
-
-    COMMIT TRANSACTION;
 END
 GO
 
@@ -371,7 +323,6 @@ AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
-    BEGIN TRANSACTION;
 
     IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @AdminID)
         THROW 50002, N'User was not found.', 1;
@@ -379,7 +330,6 @@ BEGIN
     INSERT INTO dbo.Groups (AdminID, GroupName, GroupDescription, Color)
     VALUES (@AdminID, @GroupName, @GroupDescription, @Color);
 
-    COMMIT TRANSACTION;
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
 END
 GO
@@ -392,9 +342,6 @@ CREATE PROCEDURE dbo.UpdateGroup
     @Color             VARCHAR(16) = '#FFFFFF'
 AS
 BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
     IF dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
         THROW 50004, N'Only the group owner can edit this group.', 1;
 
@@ -406,8 +353,6 @@ BEGIN
 
     IF @@ROWCOUNT = 0
         THROW 50002, N'Group was not found.', 1;
-
-    COMMIT TRANSACTION;
 END
 GO
 
@@ -424,18 +369,7 @@ BEGIN
 
     DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
     INSERT INTO @TasksToDelete (TaskID)
-    SELECT TaskID FROM dbo.Tasks WHERE GroupID = @GroupID AND TaskParentID IS NULL;
-
-    DECLARE @RowsAdded INT = 1;
-    WHILE @RowsAdded > 0
-    BEGIN
-        INSERT INTO @TasksToDelete (TaskID)
-        SELECT T.TaskID FROM dbo.Tasks T
-        JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
-        WHERE NOT EXISTS (SELECT 1 FROM @TasksToDelete X WHERE X.TaskID = T.TaskID);
-
-        SET @RowsAdded = @@ROWCOUNT;
-    END
+    SELECT TaskID FROM dbo.Tasks WHERE GroupID = @GroupID;
 
     DELETE FROM dbo.Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
     DELETE FROM dbo.Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
@@ -456,9 +390,6 @@ CREATE PROCEDURE dbo.AddGroupMember
     @ActingUserID INT
 AS
 BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
     IF dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
         THROW 50001, N'You do not have permission to manage this group.', 1;
 
@@ -467,8 +398,6 @@ BEGIN
 
     INSERT INTO dbo.GroupMembers (GroupID, UserID)
     VALUES (@GroupID, @UserID);
-
-    COMMIT TRANSACTION;
 END
 GO
 
@@ -506,7 +435,6 @@ AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
-    BEGIN TRANSACTION;
 
     IF dbo.IsGroupMember(@UserID, @GroupID) = 0
         THROW 50001, N'You must be a member of the group to post.', 1;
@@ -517,7 +445,6 @@ BEGIN
     INSERT INTO dbo.PostsInGroups (GroupID, UserID, PostContent)
     VALUES (@GroupID, @UserID, @PostContent);
 
-    COMMIT TRANSACTION;
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
 END
 GO
@@ -791,54 +718,9 @@ BEGIN
     FROM dbo.Planned P
     WHERE P.TaskID = @TaskID;
 
-    IF @TaskStatusID = 3 AND @RepetitionTypeID IS NOT NULL AND @RepetitionTypeID > 1 AND @OldStart IS NOT NULL
+    IF @TaskStatusID = 3 AND @RepetitionTypeID BETWEEN 2 AND 5 AND @OldStart IS NOT NULL
     BEGIN
-        -- EDGE CASE: DATEADD(MONTH/YEAR, ...) silently clamps Jan 31 to Feb 28 and Feb 29 to
-        -- Feb 28, which would drag the recurrence to the 28th forever. When the scheduled day is
-        -- the last day of its month, every candidate is re-anchored on the last day of the month
-        -- it lands in, so the original day (Jan 31, Feb 29) is kept across short and leap years.
-        DECLARE @IsMonthEnd BIT =
-            CASE WHEN @RepetitionTypeID >= 4
-                      AND DATEPART(DAY, @OldStart) = DATEPART(DAY, EOMONTH(@OldStart))
-                 THEN 1 ELSE 0 END;
-
-        DECLARE @n INT;
-        SET @n = CASE @RepetitionTypeID
-            WHEN 2 THEN DATEDIFF(DAY,   CAST(@OldStart AS DATE), CAST(GETDATE() AS DATE))
-            WHEN 3 THEN DATEDIFF(DAY,   CAST(@OldStart AS DATE), CAST(GETDATE() AS DATE)) / 7
-            WHEN 4 THEN DATEDIFF(MONTH, @OldStart, GETDATE())
-            WHEN 5 THEN DATEDIFF(YEAR,  @OldStart, GETDATE())
-            ELSE 0 END;
-        IF @n < 0
-            SET @n = 0;
-
-        DECLARE @NewStart DATETIME2;
-        IF @RepetitionTypeID BETWEEN 2 AND 5
-        BEGIN
-            WHILE @n >= 0
-            BEGIN
-                SET @NewStart = CASE @RepetitionTypeID
-                    WHEN 2 THEN DATEADD(DAY,   @n, @OldStart)
-                    WHEN 3 THEN DATEADD(WEEK,  @n, @OldStart)
-                    WHEN 4 THEN DATEADD(MONTH, @n, @OldStart)
-                    WHEN 5 THEN DATEADD(YEAR,  @n, @OldStart)
-                    ELSE @OldStart END;
-
-                IF @IsMonthEnd = 1
-                    SET @NewStart = DATEADD(DAY, DATEDIFF(DAY, CAST(@NewStart AS DATE), EOMONTH(@NewStart)), @NewStart);
-
-                -- Only a start that is already in the past is rolled forward, so an occurrence
-                -- that is still ahead (early completion) is kept, while one that is due exactly
-                -- now advances to the next period exactly as before.
-                IF @NewStart > GETDATE()
-                    BREAK;
-
-                SET @n = @n + 1;
-            END
-        END
-
-        IF @NewStart IS NULL
-            SET @NewStart = @OldStart;
+        DECLARE @NewStart DATETIME2 = dbo.NextOccurrence(@OldStart, @RepetitionTypeID, GETDATE());
 
         SET @OldEnd = CASE WHEN @OldEnd IS NULL THEN NULL
                            ELSE DATEADD(DAY, DATEDIFF(DAY, @OldStart, @NewStart), @OldEnd) END;
@@ -886,22 +768,13 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM dbo.Tasks T
         WHERE T.TaskID = @TaskID
+          AND dbo.CanModifyTask(T.TaskID, @ActingUserID) = 1
           AND (T.UserID = @ActingUserID OR dbo.CanManageGroup(@ActingUserID, T.GroupID) = 1))
         THROW 50001, N'You do not have permission to delete this task.', 1;
 
     DECLARE @TasksToDelete TABLE (TaskID INT PRIMARY KEY);
-    INSERT INTO @TasksToDelete (TaskID) VALUES (@TaskID);
-
-    DECLARE @RowsAdded INT = 1;
-    WHILE @RowsAdded > 0
-    BEGIN
-        INSERT INTO @TasksToDelete (TaskID)
-        SELECT T.TaskID FROM dbo.Tasks T
-        JOIN @TasksToDelete D ON T.TaskParentID = D.TaskID
-        WHERE NOT EXISTS (SELECT 1 FROM @TasksToDelete X WHERE X.TaskID = T.TaskID);
-
-        SET @RowsAdded = @@ROWCOUNT;
-    END
+    INSERT INTO @TasksToDelete (TaskID)
+    SELECT TaskID FROM dbo.Tasks WHERE TaskID = @TaskID OR TaskParentID = @TaskID;
 
     DELETE FROM dbo.Attachments WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
     DELETE FROM dbo.Assigned    WHERE TaskID IN (SELECT TaskID FROM @TasksToDelete);
@@ -912,27 +785,18 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetTaskParentsByRanking
-    @UserID INT
+CREATE PROCEDURE dbo.GetTaskParents
+    @UserID       INT,
+    @ByImportance BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
 
     SELECT * FROM dbo.Tasks
     WHERE TaskParentID IS NULL AND UserID = @UserID AND GroupID IS NULL
-    ORDER BY Ranking, LevelOfImportanceID DESC;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTaskParentsByImportance
-    @UserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    SELECT * FROM dbo.Tasks
-    WHERE TaskParentID IS NULL AND UserID = @UserID AND GroupID IS NULL
-    ORDER BY LevelOfImportanceID DESC, Ranking;
+    ORDER BY CASE WHEN @ByImportance = 1 THEN LevelOfImportanceID END DESC,
+             Ranking,
+             LevelOfImportanceID DESC;
 END
 GO
 
@@ -959,17 +823,10 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @GroupID INT;
-    DECLARE @OwnerID INT;
-    SELECT @GroupID = GroupID, @OwnerID = UserID FROM dbo.Tasks WHERE TaskID = @TaskParentID;
-
-    IF @OwnerID IS NULL
+    IF NOT EXISTS (SELECT 1 FROM dbo.Tasks WHERE TaskID = @TaskParentID)
         THROW 50002, N'Task was not found.', 1;
 
-    IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'You do not have access to this task.', 1;
-
-    IF @GroupID IS NULL AND @OwnerID <> @ActingUserID
+    IF dbo.CanModifyTask(@TaskParentID, @ActingUserID) = 0
         THROW 50001, N'You do not have access to this task.', 1;
 
     SELECT * FROM dbo.Tasks
@@ -1040,20 +897,26 @@ BEGIN
              THEN 1 ELSE 0 END;
 
     SELECT T.TaskID,
-           (SELECT COUNT(*) FROM dbo.Tasks C WHERE C.TaskParentID = T.TaskID) AS SubtaskCount,
-           (SELECT COUNT(*) FROM dbo.Tasks C WHERE C.TaskParentID = T.TaskID AND C.TaskStatusID = 3) AS SubtaskCompletedCount,
+           S.SubtaskCount,
+           S.SubtaskCompletedCount,
            CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.Attachments A WHERE A.TaskID = T.TaskID) THEN 1 ELSE 0 END AS BIT) AS HasAttachments,
-           (SELECT TOP 1 U.UserID  FROM dbo.Assigned X JOIN dbo.Users U ON X.ToUserID = U.UserID WHERE X.TaskID = T.TaskID ORDER BY X.AssignedID) AS AssignedToUserID,
-           (SELECT TOP 1 U.ShowName FROM dbo.Assigned X JOIN dbo.Users U ON X.ToUserID = U.UserID WHERE X.TaskID = T.TaskID ORDER BY X.AssignedID) AS AssignedToName,
-           (SELECT TOP 1 U.Color   FROM dbo.Assigned X JOIN dbo.Users U ON X.ToUserID = U.UserID WHERE X.TaskID = T.TaskID ORDER BY X.AssignedID) AS AssignedToColor,
-           (SELECT TOP 1 PP.PlannedStartDate FROM dbo.Planned PP WHERE PP.TaskID = T.TaskID ORDER BY PP.PlannedStartDate DESC) AS DueStartDate,
-           (SELECT TOP 1 PP.PlannedEndDate   FROM dbo.Planned PP WHERE PP.TaskID = T.TaskID ORDER BY PP.PlannedStartDate DESC) AS DueEndDate,
-           (SELECT TOP 1 PP.RepetitionTypeID FROM dbo.Planned PP WHERE PP.TaskID = T.TaskID ORDER BY PP.PlannedStartDate DESC) AS RepetitionTypeID,
-           (SELECT TOP 1 R.RepetitionName
-            FROM dbo.Planned PP JOIN dbo.RepetitionTypes R ON PP.RepetitionTypeID = R.RepetitionTypeID
-            WHERE PP.TaskID = T.TaskID ORDER BY PP.PlannedStartDate DESC) AS RepetitionName
+           AU.UserID    AS AssignedToUserID,
+           AU.ShowName  AS AssignedToName,
+           AU.Color     AS AssignedToColor,
+           PP.PlannedStartDate AS DueStartDate,
+           PP.PlannedEndDate   AS DueEndDate,
+           PP.RepetitionTypeID,
+           R.RepetitionName
     FROM @TaskIDs I
     JOIN dbo.Tasks T ON T.TaskID = I.TaskID
+    OUTER APPLY (SELECT COUNT(*) AS SubtaskCount,
+                        COUNT(CASE WHEN C.TaskStatusID = 3 THEN 1 END) AS SubtaskCompletedCount
+                 FROM dbo.Tasks C WHERE C.TaskParentID = T.TaskID) S
+    OUTER APPLY (SELECT TOP 1 U.UserID, U.ShowName, U.Color
+                 FROM dbo.Assigned X JOIN dbo.Users U ON X.ToUserID = U.UserID
+                 WHERE X.TaskID = T.TaskID ORDER BY X.AssignedID) AU
+    LEFT JOIN dbo.Planned PP ON PP.TaskID = T.TaskID
+    LEFT JOIN dbo.RepetitionTypes R ON R.RepetitionTypeID = PP.RepetitionTypeID
     WHERE (T.GroupID IS NOT NULL
            AND (@IsGlobalAdmin = 1
                 OR EXISTS (SELECT 1 FROM dbo.Groups G
@@ -1080,73 +943,40 @@ BEGIN
     DECLARE @YearStart DATE = DATEFROMPARTS(YEAR(GETDATE()), 1, 1);
     DECLARE @YearEnd DATE = DATEFROMPARTS(YEAR(GETDATE()), 12, 31);
 
-    -- @IncludeCompleted mirrors the "Show completed" checkbox, so the sidebar
-    -- badges always describe exactly the set of tasks rendered in the list.
-    DECLARE @AllCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks
-        WHERE TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR TaskStatusID <> 3)
-          AND (UserID = @UserID AND GroupID IS NULL));
+    DECLARE @AllCount INT, @ImportantCount INT, @TodayCount INT, @WeeklyCount INT,
+            @MonthlyCount INT, @YearlyCount INT, @PlannedCount INT, @AssignedCount INT;
 
-    DECLARE @ImportantCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks
-        WHERE TaskParentID IS NULL AND LevelOfImportanceID = 3
-          AND (@IncludeCompleted = 1 OR TaskStatusID <> 3)
-          AND (UserID = @UserID AND GroupID IS NULL));
+    SELECT @AllCount       = COUNT(*),
+           @ImportantCount = ISNULL(SUM(CASE WHEN T.LevelOfImportanceID = 3 THEN 1 ELSE 0 END), 0),
+           @PlannedCount   = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL THEN 1 ELSE 0 END), 0),
+           @TodayCount     = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL
+                                              AND CAST(P.PlannedStartDate AS DATE) <= @Today
+                                              AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
+                                             THEN 1 ELSE 0 END), 0),
+           @WeeklyCount    = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL
+                                              AND CAST(P.PlannedStartDate AS DATE) <= @WeekEnd
+                                              AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @WeekStart
+                                             THEN 1 ELSE 0 END), 0),
+           @MonthlyCount   = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL
+                                              AND CAST(P.PlannedStartDate AS DATE) <= @MonthEnd
+                                              AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @MonthStart
+                                             THEN 1 ELSE 0 END), 0),
+           @YearlyCount    = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL
+                                              AND CAST(P.PlannedStartDate AS DATE) <= @YearEnd
+                                              AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @YearStart
+                                             THEN 1 ELSE 0 END), 0)
+    FROM dbo.Tasks T
+    LEFT JOIN dbo.Planned P ON P.TaskID = T.TaskID
+    WHERE T.TaskParentID IS NULL
+      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+      AND T.UserID = @UserID AND T.GroupID IS NULL;
 
-    DECLARE @TodayCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND (T.UserID = @UserID AND T.GroupID IS NULL)
-          AND EXISTS (SELECT 1 FROM dbo.Planned P
-                      WHERE P.TaskID = T.TaskID
-                        AND CAST(P.PlannedStartDate AS DATE) <= @Today
-                        AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)));
-
-    DECLARE @WeeklyCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND (T.UserID = @UserID AND T.GroupID IS NULL)
-          AND EXISTS (SELECT 1 FROM dbo.Planned P
-                      WHERE P.TaskID = T.TaskID
-                        AND CAST(P.PlannedStartDate AS DATE) <= @WeekEnd
-                        AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @WeekStart));
-
-    DECLARE @MonthlyCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND (T.UserID = @UserID AND T.GroupID IS NULL)
-          AND EXISTS (SELECT 1 FROM dbo.Planned P
-                      WHERE P.TaskID = T.TaskID
-                        AND CAST(P.PlannedStartDate AS DATE) <= @MonthEnd
-                        AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @MonthStart));
-
-    DECLARE @YearlyCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND (T.UserID = @UserID AND T.GroupID IS NULL)
-          AND EXISTS (SELECT 1 FROM dbo.Planned P
-                      WHERE P.TaskID = T.TaskID
-                        AND CAST(P.PlannedStartDate AS DATE) <= @YearEnd
-                        AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @YearStart));
-
-    DECLARE @PlannedCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND (T.UserID = @UserID AND T.GroupID IS NULL)
-          AND EXISTS (SELECT 1 FROM dbo.Planned P WHERE P.TaskID = T.TaskID));
-
-    DECLARE @AssignedCount INT = (
-        SELECT COUNT(*) FROM dbo.Tasks T
-        JOIN dbo.Assigned A ON T.TaskID = A.TaskID
-        WHERE T.TaskParentID IS NULL
-          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-          AND A.ToUserID = @UserID);
+    SELECT @AssignedCount = COUNT(*)
+    FROM dbo.Tasks T
+    JOIN dbo.Assigned A ON T.TaskID = A.TaskID
+    WHERE T.TaskParentID IS NULL
+      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+      AND A.ToUserID = @UserID;
 
     SELECT @AllCount       AS AllCount,
            @TodayCount     AS TodayCount,
@@ -1169,7 +999,6 @@ AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
-    BEGIN TRANSACTION;
 
     IF dbo.CanModifyTask(@TaskID, @ActingUserID) = 0
         THROW 50001, N'You do not have permission to modify this task.', 1;
@@ -1183,7 +1012,6 @@ BEGIN
     INSERT INTO dbo.Attachments (TaskID, FileName, FileData, FileSizeKB)
     VALUES (@TaskID, @FileName, @FileData, CAST(CEILING(DATALENGTH(@FileData) / 1024.0) AS INT));
 
-    COMMIT TRANSACTION;
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
 END
 GO
@@ -1197,9 +1025,7 @@ BEGIN
     SELECT A.AttachmentID, A.TaskID, A.FileName, A.FileSizeKB
     FROM dbo.Attachments A
     JOIN @TaskIDs I ON A.TaskID = I.TaskID
-    JOIN dbo.Tasks T ON A.TaskID = T.TaskID
-    WHERE (T.GroupID IS NOT NULL AND dbo.IsGroupMember(@ActingUserID, T.GroupID) = 1)
-       OR (T.GroupID IS NULL AND T.UserID = @ActingUserID)
+    WHERE dbo.CanModifyTask(A.TaskID, @ActingUserID) = 1
     ORDER BY I.SortOrder, A.AttachmentID;
 END
 GO
@@ -1209,9 +1035,6 @@ CREATE PROCEDURE dbo.DeleteAttachment
     @ActingUserID INT
 AS
 BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
     DECLARE @TaskID INT;
     SELECT @TaskID = TaskID FROM dbo.Attachments WHERE AttachmentID = @AttachmentID;
 
@@ -1222,60 +1045,6 @@ BEGIN
         THROW 50001, N'You do not have permission to delete this attachment.', 1;
 
     DELETE FROM dbo.Attachments WHERE AttachmentID = @AttachmentID;
-
-    COMMIT TRANSACTION;
-END
-GO
-
-CREATE PROCEDURE dbo.AddAssignTask
-    @TaskID       INT,
-    @ToUserID     INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    SET NOCOUNT ON;
-    BEGIN TRANSACTION;
-
-    IF dbo.CanModifyTask(@TaskID, @ActingUserID) = 0
-        THROW 50001, N'You do not have permission to modify this task.', 1;
-
-    DECLARE @GroupID INT;
-    SELECT @GroupID = GroupID FROM dbo.Tasks WHERE TaskID = @TaskID;
-
-    IF @GroupID IS NULL
-        THROW 50003, N'Personal tasks cannot have assignees.', 1;
-
-    IF dbo.IsGroupMember(@ToUserID, @GroupID) = 0
-        THROW 50003, N'Assignees must be members of the group.', 1;
-
-    IF NOT EXISTS (SELECT 1 FROM dbo.Assigned WHERE TaskID = @TaskID AND ToUserID = @ToUserID)
-        INSERT INTO dbo.Assigned (TaskID, ToUserID) VALUES (@TaskID, @ToUserID);
-
-    COMMIT TRANSACTION;
-END
-GO
-
-CREATE PROCEDURE dbo.DeleteAssignedTask
-    @AssignedID   INT,
-    @ActingUserID INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
-    DECLARE @TaskID INT;
-    SELECT @TaskID = TaskID FROM dbo.Assigned WHERE AssignedID = @AssignedID;
-
-    IF @TaskID IS NULL
-        THROW 50002, N'Assignment was not found.', 1;
-
-    IF dbo.CanModifyTask(@TaskID, @ActingUserID) = 0
-        THROW 50001, N'You do not have permission to modify this task.', 1;
-
-    DELETE FROM dbo.Assigned WHERE AssignedID = @AssignedID;
-
-    COMMIT TRANSACTION;
 END
 GO
 
@@ -1321,37 +1090,14 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.DeletePlanned
-    @PlannedID     INT,
-    @ActingUserID  INT
-AS
-BEGIN
-    SET XACT_ABORT ON;
-    BEGIN TRANSACTION;
-
-    DECLARE @TaskID INT;
-    SELECT @TaskID = TaskID FROM dbo.Planned WHERE PlannedID = @PlannedID;
-
-    IF @TaskID IS NULL
-        THROW 50002, N'Planned entry was not found.', 1;
-
-    IF dbo.CanModifyTask(@TaskID, @ActingUserID) = 0
-        THROW 50001, N'You do not have permission to modify this task.', 1;
-
-    DELETE FROM dbo.Planned WHERE PlannedID = @PlannedID;
-
-    COMMIT TRANSACTION;
-END
-GO
-
--- CHANGED (AutoUpdatePlanneds): monthly/yearly rolls re-anchor last-day-of-month recurrences
--- (Jan 31, Feb 29) on the last day of the month they land in instead of drifting to the 28th.
 CREATE PROCEDURE dbo.AutoUpdatePlanneds
     @UserID INT = NULL
 AS
 BEGIN
     SET XACT_ABORT ON;
     SET NOCOUNT ON;
+
+    DECLARE @Today DATETIME2 = CAST(CAST(GETDATE() AS DATE) AS DATETIME2);
 
     DECLARE @Rolled TABLE
     (
@@ -1362,52 +1108,12 @@ BEGIN
 
     INSERT INTO @Rolled (TaskID, NewStart, NewEnd)
     SELECT P.TaskID,
-           MonthEnd.NewStart,
-           CASE WHEN P.PlannedEndDate IS NULL THEN NULL
-                ELSE DATEADD(DAY, DATEDIFF(DAY, P.PlannedStartDate, MonthEnd.NewStart), P.PlannedEndDate)
-           END
+           N.NewStart,
+           DATEADD(DAY, DATEDIFF(DAY, P.PlannedStartDate, N.NewStart), P.PlannedEndDate)
     FROM dbo.Planned P
-    CROSS APPLY
-    (
-        SELECT n = CASE P.RepetitionTypeID
-                    WHEN 2 THEN DATEDIFF(DAY,   CAST(P.PlannedStartDate AS DATE), CAST(GETDATE() AS DATE))
-                    WHEN 3 THEN DATEDIFF(DAY,   CAST(P.PlannedStartDate AS DATE), CAST(GETDATE() AS DATE)) / 7
-                    WHEN 4 THEN DATEDIFF(MONTH, P.PlannedStartDate, GETDATE())
-                    WHEN 5 THEN DATEDIFF(YEAR,  P.PlannedStartDate, GETDATE())
-                    ELSE 0 END
-    ) N
-    CROSS APPLY
-    (
-        SELECT Candidate = CASE P.RepetitionTypeID
-                            WHEN 2 THEN DATEADD(DAY,   N.n, P.PlannedStartDate)
-                            WHEN 3 THEN DATEADD(WEEK,  N.n, P.PlannedStartDate)
-                            WHEN 4 THEN DATEADD(MONTH, N.n, P.PlannedStartDate)
-                            WHEN 5 THEN DATEADD(YEAR,  N.n, P.PlannedStartDate)
-                            ELSE P.PlannedStartDate END
-    ) C
-    CROSS APPLY
-    (
-        SELECT NewStart = CASE WHEN CAST(C.Candidate AS DATE) < CAST(GETDATE() AS DATE) THEN
-                                CASE P.RepetitionTypeID
-                                    WHEN 2 THEN DATEADD(DAY,   N.n + 1, P.PlannedStartDate)
-                                    WHEN 3 THEN DATEADD(WEEK,  N.n + 1, P.PlannedStartDate)
-                                    WHEN 4 THEN DATEADD(MONTH, N.n + 1, P.PlannedStartDate)
-                                    WHEN 5 THEN DATEADD(YEAR,  N.n + 1, P.PlannedStartDate)
-                                    ELSE P.PlannedStartDate END
-                           ELSE C.Candidate END
-    ) Nxt
-    -- EDGE CASE: DATEADD(MONTH/YEAR, ...) clamps Jan 31 to Feb 28 and Feb 29 to Feb 28, so a
-    -- month-end (or leap day) recurrence would stay on the 28th from then on. Re-anchoring those
-    -- candidates on the last day of their month keeps Jan 31 / Feb 29 across short and leap years.
-    CROSS APPLY
-    (
-        SELECT NewStart = CASE WHEN P.RepetitionTypeID >= 4
-                                 AND DATEPART(DAY, P.PlannedStartDate) = DATEPART(DAY, EOMONTH(P.PlannedStartDate))
-                                THEN DATEADD(DAY, DATEDIFF(DAY, CAST(Nxt.NewStart AS DATE), EOMONTH(Nxt.NewStart)), Nxt.NewStart)
-                                ELSE Nxt.NewStart END
-    ) MonthEnd
+    CROSS APPLY (SELECT NewStart = dbo.NextOccurrence(P.PlannedStartDate, P.RepetitionTypeID, @Today)) N
     WHERE P.RepetitionTypeID > 1
-      AND CAST(P.PlannedStartDate AS DATE) < CAST(GETDATE() AS DATE)
+      AND P.PlannedStartDate < @Today
       AND (@UserID IS NULL OR EXISTS (SELECT 1 FROM dbo.Tasks T WHERE T.TaskID = P.TaskID AND T.UserID = @UserID));
 
     UPDATE P
@@ -1424,86 +1130,47 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetTasksPlannedByDate
-    @UserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Planned P ON T.TaskID = P.TaskID
-    WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-    ORDER BY CAST(P.PlannedStartDate AS DATE), T.Ranking;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTasksToday
-    @UserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Planned P ON T.TaskID = P.TaskID
-    WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-      AND CAST(P.PlannedStartDate AS DATE) <= CAST(GETDATE() AS DATE)
-      AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= CAST(GETDATE() AS DATE))
-    ORDER BY CAST(P.PlannedStartDate AS DATE), T.Ranking;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTasksWeekly
-    @UserID INT
+CREATE PROCEDURE dbo.GetTasksPlanned
+    @UserID INT,
+    @Scope  TINYINT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Today DATE = CAST(GETDATE() AS DATE);
-    DECLARE @WeekStart DATE = DATEADD(DAY, -((DATEPART(WEEKDAY, @Today) + @@DATEFIRST - 2) % 7), @Today);
-    DECLARE @WeekEnd DATE = DATEADD(DAY, 6, @WeekStart);
+    DECLARE @Start DATE = NULL;
+    DECLARE @End   DATE = NULL;
+
+    IF @Scope = 1
+        SET @Start = @Today;
+    ELSE IF @Scope = 2
+    BEGIN
+        SET @Start = DATEADD(DAY, -((DATEPART(WEEKDAY, @Today) + @@DATEFIRST - 2) % 7), @Today);
+        SET @End = DATEADD(DAY, 6, @Start);
+    END
+    ELSE IF @Scope = 3
+    BEGIN
+        SET @Start = DATEADD(DAY, 1 - DAY(@Today), @Today);
+        SET @End = EOMONTH(@Today);
+    END
+    ELSE IF @Scope = 4
+    BEGIN
+        SET @Start = DATEFROMPARTS(YEAR(@Today), 1, 1);
+        SET @End = DATEFROMPARTS(YEAR(@Today), 12, 31);
+    END
 
     SELECT T.* FROM dbo.Tasks T
     JOIN dbo.Planned P ON T.TaskID = P.TaskID
     WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-      AND CAST(P.PlannedStartDate AS DATE) <= @WeekEnd
-      AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @WeekStart
-    ORDER BY T.Ranking;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTasksMonthly
-    @UserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @MonthStart DATE = DATEADD(DAY, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE));
-    DECLARE @MonthEnd DATE = EOMONTH(GETDATE());
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Planned P ON T.TaskID = P.TaskID
-    WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-      AND CAST(P.PlannedStartDate AS DATE) <= @MonthEnd
-      AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @MonthStart
-    ORDER BY T.Ranking;
-END
-GO
-
-CREATE PROCEDURE dbo.GetTasksYearly
-    @UserID INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @YearStart DATE = DATEFROMPARTS(YEAR(GETDATE()), 1, 1);
-    DECLARE @YearEnd DATE = DATEFROMPARTS(YEAR(GETDATE()), 12, 31);
-
-    SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Planned P ON T.TaskID = P.TaskID
-    WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-      AND CAST(P.PlannedStartDate AS DATE) <= @YearEnd
-      AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @YearStart
-    ORDER BY T.Ranking;
+      AND (
+            @Scope = 0
+         OR (@Scope = 1 AND CAST(P.PlannedStartDate AS DATE) <= @Start
+                       AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Start))
+         OR (@Scope >= 2 AND CAST(P.PlannedStartDate AS DATE) <= @End
+                       AND COALESCE(CAST(P.PlannedEndDate AS DATE), CAST(P.PlannedStartDate AS DATE)) >= @Start)
+      )
+    ORDER BY CASE WHEN @Scope <= 1 THEN CAST(P.PlannedStartDate AS DATE) END,
+             T.Ranking;
 END
 GO
 
@@ -1522,22 +1189,16 @@ GO
 CREATE INDEX IX_Tasks_PersonalScope ON dbo.Tasks (UserID, TaskParentID, Ranking);
 CREATE INDEX IX_Tasks_GroupScope    ON dbo.Tasks (GroupID, TaskParentID, Ranking);
 CREATE INDEX IX_Tasks_Parent        ON dbo.Tasks (TaskParentID);
-CREATE INDEX IX_Tasks_Status        ON dbo.Tasks (TaskStatusID);
-CREATE INDEX IX_Tasks_Level         ON dbo.Tasks (LevelOfImportanceID);
 GO
 
-CREATE INDEX IX_Users_PermissionID  ON dbo.Users (PermissionID);
-CREATE INDEX IX_Users_ShowName      ON dbo.Users (ShowName);
 CREATE UNIQUE INDEX UQ_Users_UserEmail ON dbo.Users (UserEmail) WHERE UserEmail IS NOT NULL;
 GO
 
 CREATE INDEX IX_Groups_AdminID     ON dbo.Groups (AdminID);
-CREATE INDEX IX_Groups_GroupName   ON dbo.Groups (GroupName);
 CREATE INDEX IX_GroupMembers_UserID ON dbo.GroupMembers (UserID);
 GO
 
 CREATE INDEX IX_PostsInGroups_Group  ON dbo.PostsInGroups (GroupID, PostID);
-CREATE INDEX IX_PostsInGroups_UserID ON dbo.PostsInGroups (UserID);
 GO
 
 CREATE INDEX IX_Attachments_TaskID ON dbo.Attachments (TaskID);
@@ -1545,6 +1206,4 @@ CREATE INDEX IX_Assigned_ToUser    ON dbo.Assigned (ToUserID);
 GO
 
 CREATE UNIQUE INDEX UQ_Planned_TaskID        ON dbo.Planned (TaskID);
-CREATE INDEX IX_Planned_StartDate            ON dbo.Planned (PlannedStartDate);
-CREATE INDEX IX_Planned_RepetitionTypeID     ON dbo.Planned (RepetitionTypeID);
 GO

@@ -2,10 +2,6 @@ using System.Windows.Input;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
 
-/// <summary>
-/// Parameterless overload, expressed as an adapter over <see cref="RelayCommand{T}"/>
-/// that discards the command parameter. All behaviour lives in the generic version.
-/// </summary>
 public class RelayCommand : RelayCommand<object?>
 {
     public RelayCommand(Action execute, Func<bool>? canExecute = null)
@@ -45,10 +41,6 @@ public class RelayCommand<T> : ICommand
         _execute(parameter is T value ? value : default);
 }
 
-/// <summary>
-/// Parameterless overload, expressed as an adapter over <see cref="AsyncRelayCommand{T}"/>
-/// that discards the command parameter. All behaviour lives in the generic version.
-/// </summary>
 public class AsyncRelayCommand : AsyncRelayCommand<object?>
 {
     public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null, Action<Exception>? onError = null)

@@ -5,7 +5,7 @@ namespace Core.Security;
 
 public static class PasswordHasher
 {
-    public const int Iterations = 210_000;
+    private const int Iterations = 210_000;
     private const int SaltSize = 16;
     private const int HashSize = 32;
     private const string FormatPrefix = "pbkdf2";
@@ -19,7 +19,7 @@ public static class PasswordHasher
         return $"{FormatPrefix}${Iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
 
-    public static bool IsLegacySha256(string stored)
+    private static bool IsLegacySha256(string stored)
     {
         if (string.IsNullOrEmpty(stored) || stored.Length != 64)
             return false;

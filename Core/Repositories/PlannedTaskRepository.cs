@@ -31,13 +31,6 @@ public static class PlannedTaskRepository
         return plannedId ?? throw new InvalidOperationException("The plan could not be saved.");
     }
 
-    public static async Task DeleteAsync(int plannedId, int actingUserId)
-    {
-        await SqlHelper.ExecuteAsync("DeletePlanned", true,
-            new SqlParameter("@PlannedID", SqlDbType.Int) { Value = plannedId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
-    }
-
     public static async Task AutoUpdateAsync()
     {
         await SqlHelper.ExecuteAsync("AutoUpdatePlanneds", true);
@@ -51,10 +44,6 @@ public static class PlannedTaskRepository
         return rows.Count == 0 ? null : new PlannedTask(rows[0]);
     }
 
-    /// <summary>
-    /// Fetches the most recent Planned record for each taskId in a single query.
-    /// Equivalent to calling GetPlannedAsync in a loop, but without N round-trips.
-    /// </summary>
     public static async Task<IReadOnlyDictionary<int, PlannedTask>> GetPlannedForTasksAsync(
         IReadOnlyList<int> taskIds)
     {
@@ -86,17 +75,9 @@ public static class PlannedTaskRepository
 
     public static async Task<List<TodoTask>> GetTasksAsync(int userId, PlannedScope scope)
     {
-        var procedure = scope switch
-        {
-            PlannedScope.Daily => "GetTasksToday",
-            PlannedScope.Weekly => "GetTasksWeekly",
-            PlannedScope.Monthly => "GetTasksMonthly",
-            PlannedScope.Yearly => "GetTasksYearly",
-            _ => "GetTasksPlannedByDate"
-        };
-
-        var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
+        var rows = await SqlHelper.QueryAsync("GetTasksPlanned", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@Scope", SqlDbType.TinyInt) { Value = (byte)scope });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 }

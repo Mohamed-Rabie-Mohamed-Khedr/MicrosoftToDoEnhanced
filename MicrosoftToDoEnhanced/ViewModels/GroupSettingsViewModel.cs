@@ -12,7 +12,7 @@ public class GroupSettingsViewModel : ViewModelBase
     private readonly User _currentUser;
     private readonly MainViewModel _owner;
     private readonly Group _workingGroup;
-    private readonly IConfirmationService _confirmation;
+    private readonly MessageBoxConfirmationService _confirmation;
 
     private int? _groupId;
     private bool _hasMorePosts;
@@ -22,7 +22,7 @@ public class GroupSettingsViewModel : ViewModelBase
     private string _color = "#0078D4";
 
     public GroupSettingsViewModel(
-        User currentUser, Group? existing, MainViewModel owner, IConfirmationService confirmation)
+        User currentUser, Group? existing, MainViewModel owner, MessageBoxConfirmationService confirmation)
     {
         _currentUser = currentUser;
         _owner = owner;
@@ -53,12 +53,8 @@ public class GroupSettingsViewModel : ViewModelBase
         LoadMorePostsCommand = new AsyncRelayCommand(LoadMorePostsAsync, onError: OnCommandError);
     }
 
-    private void OnCommandError(Exception exception)
-    {
-        _owner.RaiseToast(!string.IsNullOrWhiteSpace(exception.Message)
-            ? exception.Message
-            : "Something went wrong. Please try again.");
-    }
+    private void OnCommandError(Exception exception) =>
+        _owner.RaiseToast(DescribeError(exception));
 
     public event EventHandler? RequestClose;
 

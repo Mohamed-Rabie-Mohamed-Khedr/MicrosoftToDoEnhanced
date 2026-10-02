@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Core.Repositories;
-using MicrosoftToDoEnhanced.Services;
 using MicrosoftToDoEnhanced.Themes;
 using MicrosoftToDoEnhanced.ViewModels;
 
@@ -58,6 +57,7 @@ public partial class LoginView : Window
 
     private void OpenMainWindow(User user)
     {
+        ThemeManager.ApplyAccentColor(user.Color);
         new global::MicrosoftToDoEnhanced.MainWindow(user).Show();
         Close();
     }

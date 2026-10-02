@@ -86,13 +86,6 @@ public static class UserRepository
             new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash });
     }
 
-    public static async Task DeleteUserAsync(int userId)
-    {
-        await SqlHelper.ExecuteAsync("DeleteUser", true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@ConfirmGroupImpact", SqlDbType.Bit) { Value = true });
-    }
-
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
     {
         public TimeSpan RetryAfter { get; init; }
@@ -127,7 +120,6 @@ public static class UserRepository
             public long LockedUntil;
         }
 
-        // Keyed case-insensitively so "Alice" and "alice" share one attempt budget.
         private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
         private readonly Lock _gate = new();
 
@@ -145,7 +137,6 @@ public static class UserRepository
             }
         }
 
-        /// <summary>Records a failed attempt and returns how long to stall before replying.</summary>
         public TimeSpan RegisterFailure(string userName)
         {
             lock (_gate)
@@ -180,10 +171,6 @@ public static class UserRepository
             }
         }
 
-        /// <summary>
-        /// Drops expired entries first, then the entries closest to their free-attempt
-        /// budget, so real accounts under attack keep their counters.
-        /// </summary>
         private void EvictIfFull()
         {
             if (_entries.Count < MaxTrackedNames)
@@ -207,10 +194,6 @@ public static class UserRepository
 
     private static readonly SignInThrottle SignInAttempts = new();
 
-    /// <summary>
-    /// A throw-away hash used to spend roughly the same CPU on an unknown user name as
-    /// on a known one, so sign-in timing does not reveal which accounts exist.
-    /// </summary>
     private static readonly string DecoyHash =
         PasswordHasher.Hash(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
 
@@ -229,7 +212,6 @@ public static class UserRepository
         var storedHash = await GetUserPasswordHashAsync(trimmedName);
         if (string.IsNullOrEmpty(storedHash))
         {
-            // Spend comparable time, then charge the attempt to the throttle.
             PasswordHasher.Verify(password, DecoyHash);
             await Task.Delay(SignInAttempts.RegisterFailure(key));
             return SignInResult.Failed();

@@ -34,10 +34,6 @@ public partial class TaskItem : UserControl
             listBoxItem.IsSelected = true;
     }
 
-    /// <summary>
-    /// Today and Planned are ordered by date and Important is a filtered subset of
-    /// "All", so a drop there would move items in a way the user did not intend.
-    /// </summary>
     private static bool ReorderAllowed(object? dataContext) =>
         dataContext is not ViewModels.TodoTaskViewModel task || task.CanReorder;
 
@@ -54,9 +50,6 @@ public partial class TaskItem : UserControl
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Without this, DragOver leaves e.Effects at None and WPF never raises Drop.
-    /// </summary>
     private void OnDragOver(object sender, DragEventArgs e)
     {
         e.Effects = AcceptsDrop(e) ? DragDropEffects.Move : DragDropEffects.None;

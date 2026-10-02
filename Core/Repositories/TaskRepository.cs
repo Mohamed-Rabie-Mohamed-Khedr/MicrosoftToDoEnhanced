@@ -133,9 +133,9 @@ public static class TaskRepository
 
     public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance)
     {
-        var procedure = byImportance ? "GetTaskParentsByImportance" : "GetTaskParentsByRanking";
-        var rows = await SqlHelper.QueryAsync(procedure, true,
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
+        var rows = await SqlHelper.QueryAsync("GetTaskParents", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@ByImportance", SqlDbType.Bit) { Value = byImportance });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
