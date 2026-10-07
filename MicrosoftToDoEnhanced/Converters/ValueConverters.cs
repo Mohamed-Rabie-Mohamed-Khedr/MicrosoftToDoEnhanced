@@ -13,8 +13,9 @@ public class HexToBrushConverter : IValueConverter
         {
             try
             {
-                var color = (Color)ColorConverter.ConvertFromString(hex);
-                return new SolidColorBrush(color);
+                var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+                brush.Freeze();
+                return brush;
             }
             catch {  }
         }

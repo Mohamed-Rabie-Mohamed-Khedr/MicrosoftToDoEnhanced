@@ -52,11 +52,17 @@ public static class ThemeManager
         if (app is null || !TryParseColor(hexColor, out var color))
             return;
 
-        app.Resources["AccentBrush"] = new SolidColorBrush(color);
-        app.Resources["AccentHoverBrush"] = new SolidColorBrush(Lighten(color, 0.12));
-        app.Resources["AccentPressedBrush"] = new SolidColorBrush(Darken(color, 0.12));
-        app.Resources["AccentSubtleBrush"] = new SolidColorBrush(Color.FromArgb(0x14, color.R, color.G, color.B));
+        app.Resources["AccentBrush"] = Frozen(new SolidColorBrush(color));
+        app.Resources["AccentHoverBrush"] = Frozen(new SolidColorBrush(Lighten(color, 0.12)));
+        app.Resources["AccentPressedBrush"] = Frozen(new SolidColorBrush(Darken(color, 0.12)));
+        app.Resources["AccentSubtleBrush"] = Frozen(new SolidColorBrush(Color.FromArgb(0x14, color.R, color.G, color.B)));
         app.Resources["AccentColor"] = color;
+    }
+
+    private static SolidColorBrush Frozen(SolidColorBrush brush)
+    {
+        brush.Freeze();
+        return brush;
     }
 
     private static bool TryParseColor(string hex, out Color color)

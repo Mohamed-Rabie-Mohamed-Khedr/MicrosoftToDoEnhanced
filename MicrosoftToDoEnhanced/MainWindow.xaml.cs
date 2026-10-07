@@ -12,11 +12,6 @@ namespace MicrosoftToDoEnhanced
         private Storyboard? _toastShow;
         private Storyboard? _toastHide;
 
-        public MainWindow()
-        {
-            InitializeComponent();
-        }
-
         public MainWindow(User user)
         {
             InitializeComponent();
@@ -32,12 +27,7 @@ namespace MicrosoftToDoEnhanced
             };
             DataContext = viewModel;
 
-            _ = InitializeViewModelAsync(viewModel);
-        }
-
-        private static async Task InitializeViewModelAsync(MainViewModel viewModel)
-        {
-            await viewModel.InitializeAsync();
+            _ = viewModel.InitializeAsync();
         }
 
         private void OnThemeToggled(object sender, RoutedEventArgs e)

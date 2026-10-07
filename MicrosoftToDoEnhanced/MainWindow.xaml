@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:MicrosoftToDoEnhanced"
         xmlns:views="clr-namespace:MicrosoftToDoEnhanced.Views"
         xmlns:controls="clr-namespace:MicrosoftToDoEnhanced.Controls"
         mc:Ignorable="d"
@@ -12,6 +11,31 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="Segoe UI Variable Text, Segoe UI">
+
+    <Window.Resources>
+        <Style x:Key="SortRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="GroupName" Value="SortMode"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root" CornerRadius="7" Padding="10,4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -145,24 +169,23 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Width="34" Height="34" VerticalAlignment="Center">
-                            <Ellipse Fill="{Binding CurrentUser.Color, Converter={StaticResource HexToBrushConverter}}"/>
+                            <Ellipse Fill="{Binding User.Color, Converter={StaticResource HexToBrushConverter}}"/>
                             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
                                        FontSize="12" FontWeight="SemiBold" Foreground="White"
-                                       Text="{Binding CurrentUser.ShowName, Converter={StaticResource InitialsConverter}}"/>
+                                       Text="{Binding User.ShowName, Converter={StaticResource InitialsConverter}}"/>
                         </Grid>
                         <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextPrimaryBrush}"
-                                           Text="{Binding CurrentUser.ShowName}"/>
+                                           Text="{Binding User.ShowName}"/>
                                 <Border Style="{StaticResource BadgeStyle}" Margin="6,0,0,0" VerticalAlignment="Center"
-                                        Background="{DynamicResource AccentSubtleBrush}"
-                                        Visibility="{Binding CurrentUser.IsAdmin, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        Background="{DynamicResource AccentSubtleBrush}">
                                     <TextBlock Style="{StaticResource BadgeTextStyle}" Foreground="{DynamicResource AccentBrush}"
                                                Text="Admin"/>
                                 </Border>
                             </StackPanel>
-                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding CurrentUser.UserEmail}"/>
+                            <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding User.UserEmail}"/>
                         </StackPanel>
                         <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}" ToolTip="Sign out"
                                 Command="{Binding SignOutCommand}">
@@ -195,56 +218,10 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                     <Border Style="{StaticResource BadgeStyle}" Padding="3" VerticalAlignment="Center" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <RadioButton Content="My order" Cursor="Hand" GroupName="SortMode"
-                                         IsChecked="{Binding SortByImportance, Converter={StaticResource InverseBoolConverter}}">
-                                <RadioButton.Style>
-                                    <Style TargetType="RadioButton">
-                                        <Setter Property="FontSize" Value="11.5"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="RadioButton">
-                                                    <Border x:Name="Root" CornerRadius="7" Padding="10,4">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsChecked" Value="True">
-                                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
-                                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                            <Setter Property="FontWeight" Value="SemiBold"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </RadioButton.Style>
-                            </RadioButton>
-                            <RadioButton Content="Importance" Cursor="Hand" GroupName="SortMode"
-                                         IsChecked="{Binding SortByImportance}">
-                                <RadioButton.Style>
-                                    <Style TargetType="RadioButton">
-                                        <Setter Property="FontSize" Value="11.5"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="RadioButton">
-                                                    <Border x:Name="Root" CornerRadius="7" Padding="10,4">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsChecked" Value="True">
-                                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
-                                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                            <Setter Property="FontWeight" Value="SemiBold"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </RadioButton.Style>
-                            </RadioButton>
+                            <RadioButton Content="My order" Style="{StaticResource SortRadioButtonStyle}"
+                                         IsChecked="{Binding SortByImportance, Converter={StaticResource InverseBoolConverter}}"/>
+                            <RadioButton Content="Importance" Style="{StaticResource SortRadioButtonStyle}"
+                                         IsChecked="{Binding SortByImportance}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

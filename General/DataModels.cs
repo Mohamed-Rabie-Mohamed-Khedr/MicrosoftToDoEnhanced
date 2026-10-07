@@ -5,11 +5,8 @@ namespace General.Models;
 public class User
 {
     public int UserID { get; set; }
-    public string UserName { get; set; } = string.Empty;
     public string ShowName { get; set; } = string.Empty;
     public string? UserEmail { get; set; }
-    public string PasswordHash { get; set; } = string.Empty;
-    public int PermissionID { get; set; }
     public string Color { get; set; } = string.Empty;
 
     public User() { }
@@ -17,14 +14,11 @@ public class User
     public User(DataRow dr)
     {
         UserID = Convert.ToInt32(dr["UserID"]);
-        UserName = dr["UserName"].ToString() ?? string.Empty;
         ShowName = dr["ShowName"].ToString() ?? string.Empty;
 
         if (dr["UserEmail"] != DBNull.Value)
             UserEmail = dr["UserEmail"].ToString();
 
-        PasswordHash = dr["PasswordHash"].ToString() ?? string.Empty;
-        PermissionID = Convert.ToInt32(dr["PermissionID"]);
         Color = dr["Color"].ToString() ?? string.Empty;
     }
 }
@@ -54,9 +48,6 @@ public class TodoTaskStatus
 {
     public int TaskStatusID { get; set; }
     public string StatusName { get; set; } = string.Empty;
-    public string? StatusDescription { get; set; }
-
-    public TodoTaskStatus() { }
 }
 
 public class LevelOfImportance
@@ -64,8 +55,6 @@ public class LevelOfImportance
     public int LevelOfImportanceID { get; set; }
     public string LevelName { get; set; } = string.Empty;
     public string Color { get; set; } = string.Empty;
-
-    public LevelOfImportance() { }
 }
 
 public class TodoTask
@@ -112,7 +101,6 @@ public class TodoTask
 public class Attachment
 {
     public int AttachmentID { get; set; }
-    public int TaskID { get; set; }
     public string FileName { get; set; } = string.Empty;
     public int FileSizeKB { get; set; }
 }
@@ -121,13 +109,10 @@ public class RepetitionType
 {
     public int RepetitionTypeID { get; set; }
     public string RepetitionName { get; set; } = string.Empty;
-
-    public RepetitionType() { }
 }
 
 public class PlannedTask
 {
-    public int PlannedID { get; set; }
     public int TaskID { get; set; }
     public DateTime PlannedStartDate { get; set; }
     public DateTime? PlannedEndDate { get; set; }
@@ -135,7 +120,6 @@ public class PlannedTask
 
     public PlannedTask(DataRow dr)
     {
-        PlannedID = Convert.ToInt32(dr["PlannedID"]);
         TaskID = Convert.ToInt32(dr["TaskID"]);
         PlannedStartDate = Convert.ToDateTime(dr["PlannedStartDate"]);
 
@@ -146,15 +130,8 @@ public class PlannedTask
     }
 }
 
-public enum PermissionLevel
-{
-    Person = 1,
-    Admin = 2
-}
-
 public enum TaskState
 {
-    Pending = 1,
     Incomplete = 2,
     Completed = 3
 }
@@ -168,11 +145,7 @@ public enum TaskImportance
 
 public enum RepetitionPeriod
 {
-    None = 1,
-    Daily = 2,
-    Weekly = 3,
-    Monthly = 4,
-    Yearly = 5
+    None = 1
 }
 
 public static class DbLimits

@@ -11,48 +11,37 @@ namespace MicrosoftToDoEnhanced.Views;
 
 public partial class LoginView : Window
 {
+    private readonly LoginViewModel _viewModel;
+
     public LoginView()
     {
         InitializeComponent();
-        DataContext = new LoginViewModel(OpenMainWindow);
-        if (DataContext is LoginViewModel viewModel)
-            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        DataContext = _viewModel = new LoginViewModel(OpenMainWindow);
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(LoginViewModel.SelectedAccentHex)
-            && sender is LoginViewModel viewModel)
-            ThemeManager.ApplyAccentColor(viewModel.SelectedAccentHex);
+        if (e.PropertyName == nameof(LoginViewModel.SelectedAccentHex))
+            ThemeManager.ApplyAccentColor(_viewModel.SelectedAccentHex);
 
-        if (sender is not LoginViewModel model)
-            return;
-
-        if (e.PropertyName == nameof(LoginViewModel.LoginPassword) && model.LoginPassword is null)
+        if (e.PropertyName == nameof(LoginViewModel.LoginPassword) && _viewModel.LoginPassword is null)
             LoginPasswordBox.Password = string.Empty;
 
-        if (e.PropertyName == nameof(LoginViewModel.RegisterPassword) && model.RegisterPassword is null)
+        if (e.PropertyName == nameof(LoginViewModel.RegisterPassword) && _viewModel.RegisterPassword is null)
             RegisterPasswordBox.Password = string.Empty;
     }
 
     private void OnLoginPasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (DataContext is LoginViewModel viewModel && sender is PasswordBox box)
-            viewModel.LoginPassword = box.Password;
+        if (sender is PasswordBox box)
+            _viewModel.LoginPassword = box.Password;
     }
 
     private void OnRegisterPasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (DataContext is LoginViewModel viewModel && sender is PasswordBox box)
-            viewModel.RegisterPassword = box.Password;
-    }
-
-    private void AccentSwatch_MouseUp(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not Border ring || ring.Tag is not string hex)
-            return;
-        if (DataContext is LoginViewModel viewModel)
-            viewModel.SelectedAccentHex = hex;
+        if (sender is PasswordBox box)
+            _viewModel.RegisterPassword = box.Password;
     }
 
     private void OpenMainWindow(User user)
@@ -160,6 +149,11 @@ public sealed class LoginViewModel : ViewModelBase
         get => _selectedAccentHex;
         set => SetProperty(ref _selectedAccentHex, value);
     }
+
+    public List<string> AccentChoices { get; } = new()
+    {
+        "#0078D4", "#5C2D91", "#D83B01", "#107C10", "#C239B3", "#008575"
+    };
 
     public bool IsRegisterMode
     {

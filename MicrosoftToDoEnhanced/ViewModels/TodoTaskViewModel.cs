@@ -85,7 +85,7 @@ public class TodoTaskViewModel : ViewModelBase
 
     public string Color
     {
-        get => _model.Color ?? "#FFFFFF";
+        get => _model.Color;
         set => _model.Color = value;
     }
 
@@ -364,8 +364,7 @@ public class TodoTaskViewModel : ViewModelBase
             NewStepTitle.Trim(),
             _model.LevelOfImportanceID,
             null,
-            _model.Color ?? "#FFFFFF",
-            _owner.CurrentUserId);
+            _model.Color);
 
         NewStepTitle = string.Empty;
         await ReloadStepsAsync();
@@ -437,10 +436,6 @@ public class TodoTaskViewModel : ViewModelBase
 
     private async Task SaveAsync()
     {
-        var assigneeIds = SelectedAssignee is null
-            ? Array.Empty<int>()
-            : new[] { SelectedAssignee.UserID };
-
         await TaskRepository.SaveTaskAsync(
             TaskID,
             _model.TaskParentID,
@@ -450,12 +445,11 @@ public class TodoTaskViewModel : ViewModelBase
             TaskName,
             LevelOfImportanceId,
             Description,
-            _model.Color ?? "#FFFFFF",
+            _model.Color,
             DueDate,
             EndDate,
             SelectedRecurrence?.Type.RepetitionTypeID ?? 1,
-            assigneeIds,
-            _owner.CurrentUserId);
+            SelectedAssignee?.UserID);
 
         _owner.RaiseToast("Task saved");
         await _owner.RefreshSourceAndViewAsync();

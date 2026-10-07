@@ -48,7 +48,6 @@ public class GroupSettingsViewModel : ViewModelBase
         RemoveMemberCommand = new AsyncRelayCommand<User>(RemoveMemberAsync, onError: OnCommandError);
         DeleteGroupCommand = new AsyncRelayCommand(DeleteGroupAsync, onError: OnCommandError);
         SaveGroupCommand = new AsyncRelayCommand(SaveGroupAsync, onError: OnCommandError);
-        CloseCommand = new RelayCommand(() => RequestClose?.Invoke(this, EventArgs.Empty));
         AddPostCommand = new AsyncRelayCommand(AddPostAsync, onError: OnCommandError);
         LoadMorePostsCommand = new AsyncRelayCommand(LoadMorePostsAsync, onError: OnCommandError);
     }
@@ -62,7 +61,6 @@ public class GroupSettingsViewModel : ViewModelBase
     public ICommand RemoveMemberCommand { get; }
     public ICommand DeleteGroupCommand { get; }
     public ICommand SaveGroupCommand { get; }
-    public ICommand CloseCommand { get; }
     public ICommand AddPostCommand { get; }
     public ICommand LoadMorePostsCommand { get; }
 

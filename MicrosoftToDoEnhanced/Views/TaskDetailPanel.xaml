@@ -8,6 +8,20 @@
              d:DesignHeight="700" d:DesignWidth="360"
              Background="{DynamicResource CardBackgroundBrush}">
 
+    <UserControl.Resources>
+        <Style x:Key="ImportanceToggleStyle" TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -52,48 +66,12 @@
 
                 <TextBlock Text="Importance" Style="{StaticResource CaptionTextStyle}" Margin="0,16,0,6"/>
                 <StackPanel Orientation="Horizontal">
-                    <ToggleButton Content="Low" Margin="0,0,6,0" Padding="12,6" Cursor="Hand"
-                                  IsChecked="{Binding IsLow}">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                <Setter Property="MinHeight" Value="28"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource PriorityLowBrush}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-                    <ToggleButton Content="Medium" Margin="0,0,6,0" Padding="12,6" Cursor="Hand"
-                                  IsChecked="{Binding IsMedium}">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                <Setter Property="MinHeight" Value="28"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource PriorityMediumBrush}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-                    <ToggleButton Content="High" Padding="12,6" Cursor="Hand"
-                                  IsChecked="{Binding IsHigh}">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                <Setter Property="MinHeight" Value="28"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource PriorityHighBrush}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
+                    <ToggleButton Content="Low" Margin="0,0,6,0" Tag="{DynamicResource PriorityLowBrush}"
+                                  IsChecked="{Binding IsLow}" Style="{StaticResource ImportanceToggleStyle}"/>
+                    <ToggleButton Content="Medium" Margin="0,0,6,0" Tag="{DynamicResource PriorityMediumBrush}"
+                                  IsChecked="{Binding IsMedium}" Style="{StaticResource ImportanceToggleStyle}"/>
+                    <ToggleButton Content="High" Tag="{DynamicResource PriorityHighBrush}"
+                                  IsChecked="{Binding IsHigh}" Style="{StaticResource ImportanceToggleStyle}"/>
                 </StackPanel>
 
                 <TextBlock Text="Schedule" Style="{StaticResource CaptionTextStyle}" Margin="0,18,0,6"/>

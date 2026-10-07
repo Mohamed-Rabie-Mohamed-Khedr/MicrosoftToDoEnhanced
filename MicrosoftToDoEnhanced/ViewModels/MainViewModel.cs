@@ -35,7 +35,6 @@ public class MainViewModel : ViewModelBase
     public MainViewModel(User user, Window window)
     {
         User = user;
-        CurrentUser = user;
         _window = window;
 
         SmartViews.Add(new SmartViewItem("All", "#707070", SmartViewKind.All));
@@ -59,7 +58,6 @@ public class MainViewModel : ViewModelBase
 
     public User User { get; }
     public int CurrentUserId => User.UserID;
-    public User CurrentUser { get; }
 
     public ObservableCollection<SmartViewItem> SmartViews { get; } = new();
     public ObservableCollection<Group> Groups { get; } = new();
@@ -212,7 +210,7 @@ public class MainViewModel : ViewModelBase
             _levelNames[level.LevelOfImportanceID] = level.LevelName;
 
         _assignees.Clear();
-        _assignees.AddRange(await UserRepository.GetAllUsersAsync());
+        _assignees.AddRange(lookups.Users);
 
         _recurrenceOptions.Clear();
         foreach (var type in lookups.RepetitionTypes)
@@ -229,7 +227,7 @@ public class MainViewModel : ViewModelBase
 
     public async Task RefreshCountsAsync()
     {
-        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId, includeCompleted: true);
+        var counts = await TaskRepository.GetTaskCountsAsync(CurrentUserId);
 
         SetSmartViewCount(SmartViewKind.All, counts.AllCount);
         SetSmartViewCount(SmartViewKind.Important, counts.ImportantCount);
@@ -348,7 +346,7 @@ public class MainViewModel : ViewModelBase
 
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
-            var search = SearchText!.Trim();
+            var search = SearchText.Trim();
             source = source.Where(t => t.TaskName.Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -411,8 +409,7 @@ public class MainViewModel : ViewModelBase
             taskName,
             importance,
             null,
-            "#FFFFFF",
-            CurrentUserId);
+            "#FFFFFF");
 
         if (smartView is SmartViewKind.Today or SmartViewKind.Planned)
         {

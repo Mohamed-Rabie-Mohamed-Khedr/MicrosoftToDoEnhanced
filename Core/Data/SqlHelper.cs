@@ -30,10 +30,9 @@ internal static class SqlHelper
         string sql,
         bool storedProcedure,
         SqlParameter[] parameters,
-        Func<SqlCommand, Task<T>> execute)
+        Func<SqlCommand,
+        Task<T>> execute)
     {
-        EnsureValidParameters(parameters);
-
         await using var connection = CreateConnection();
         await connection.OpenAsync();
 
@@ -84,8 +83,6 @@ internal static class SqlHelper
 
     public static async Task<MultiResultReader> QueryMultipleAsync(string procedure, params SqlParameter[] parameters)
     {
-        EnsureValidParameters(parameters);
-
         var connection = CreateConnection();
         await connection.OpenAsync();
 
@@ -109,53 +106,8 @@ internal static class SqlHelper
         }
     }
 
-    public static DataTable BuildTaskIdTable(IReadOnlyList<int> taskIds) =>
-        BuildIdTable("TaskID", taskIds);
-
-    public static DataTable BuildUserIdTable(IReadOnlyList<int> userIds) =>
-        BuildIdTable("UserID", userIds);
-
-    private static DataTable BuildIdTable(string idColumn, IReadOnlyList<int> ids)
-    {
-        var table = new DataTable();
-        table.Columns.Add(idColumn, typeof(int));
-        table.Columns.Add("SortOrder", typeof(int));
-
-        for (var i = 0; i < ids.Count; i++)
-            table.Rows.Add(ids[i], i + 1);
-
-        return table;
-    }
-
-    public static SqlParameter Tvp(string name, string typeName, DataTable table) =>
-        new(name, SqlDbType.Structured)
-        {
-            TypeName = $"dbo.{typeName}",
-            Value = table
-        };
-
-    private static void EnsureValidParameters(SqlParameter[] parameters)
-    {
-        foreach (var parameter in parameters)
-        {
-            if (parameter.SqlValue is null || parameter.SqlValue is DBNull)
-                continue;
-
-            switch (parameter.SqlValue)
-            {
-                case string value when parameter.Size > 0 && parameter.Size < int.MaxValue
-                    && value.Length > parameter.Size:
-                    throw new ArgumentOutOfRangeException(
-                        parameter.ParameterName,
-                        $"Parameter '{parameter.ParameterName}' value exceeds its declared size of {parameter.Size} characters.");
-                case byte[] value when parameter.Size > 0 && parameter.Size < int.MaxValue
-                    && value.Length > parameter.Size:
-                    throw new ArgumentOutOfRangeException(
-                        parameter.ParameterName,
-                        $"Parameter '{parameter.ParameterName}' value exceeds its declared size of {parameter.Size} bytes.");
-            }
-        }
-    }
+    public static string TaskIdsJson(IReadOnlyList<int> taskIds) =>
+        "[" + string.Join(",", taskIds) + "]";
 
     private static Exception Translate(SqlException exception)
     {
