@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using Core.Repositories;
 using Microsoft.Win32;
@@ -41,6 +42,7 @@ public class TodoTaskViewModel : ViewModelBase
         _recurrenceOptions = recurrenceOptions;
         _taskName = model.TaskName;
         _description = model.Description;
+        _selectedRecurrence = _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == 1);
 
         AddStepCommand = new AsyncRelayCommand(AddStepAsync, onError: OnAsyncCommandError);
         ToggleStepCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleStepAsync, onError: OnAsyncCommandError);
@@ -49,14 +51,42 @@ public class TodoTaskViewModel : ViewModelBase
         RemoveAttachmentCommand = new AsyncRelayCommand<Attachment>(RemoveAttachmentAsync, onError: OnAsyncCommandError);
         DeleteTaskCommand = new AsyncRelayCommand(DeleteAsync, onError: OnAsyncCommandError);
         SaveTaskCommand = new AsyncRelayCommand(SaveAsync, onError: OnAsyncCommandError);
+        OpenStepCommand = new RelayCommand<TodoTaskViewModel>(OpenStep);
+        ToggleExpandCommand = new RelayCommand(ToggleExpand);
     }
 
     private void OnAsyncCommandError(Exception exception) =>
         _owner.RaiseToast(DescribeError(exception));
 
     public int TaskID => _model.TaskID;
+    public int? TaskParentID => _model.TaskParentID;
+    public bool IsStep => _model.TaskParentID is not null;
     public DateTime CreationDate => _model.CreationDate;
     public int Ranking => _model.Ranking;
+
+    public bool HasChildren => Steps.Count > 0;
+
+    private bool _isExpanded = false;
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set => SetProperty(ref _isExpanded, value);
+    }
+
+    public Thickness RowPadding => new(IsStep ? 36 : 12, 10, 12, 10);
+
+    internal void SetRanking(int ranking) => _model.Ranking = ranking;
+
+    internal void SetChildren(IEnumerable<TodoTaskViewModel> children)
+    {
+        Steps.Clear();
+        foreach (var child in children)
+            Steps.Add(child);
+
+        UpdateStepsSummary();
+        OnPropertyChanged(nameof(HasChildren));
+    }
 
     public string TaskName
     {
@@ -171,7 +201,14 @@ public class TodoTaskViewModel : ViewModelBase
     public DateTime? DueDate
     {
         get => _dueDate;
-        set => SetProperty(ref _dueDate, value);
+        set
+        {
+            if (!SetProperty(ref _dueDate, value))
+                return;
+
+            if (value is null && SelectedRecurrence?.Type.RepetitionTypeID > 1)
+                SelectedRecurrence = _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == 1);
+        }
     }
 
     public DateTime? EndDate
@@ -187,8 +224,13 @@ public class TodoTaskViewModel : ViewModelBase
         get => _selectedRecurrence;
         set
         {
-            if (SetProperty(ref _selectedRecurrence, value))
-                OnPropertyChanged(nameof(RecurrenceName));
+            if (!SetProperty(ref _selectedRecurrence, value))
+                return;
+
+            OnPropertyChanged(nameof(RecurrenceName));
+
+            if (value?.Type.RepetitionTypeID > 1 && _dueDate is null)
+                DueDate = DateTime.Today;
         }
     }
 
@@ -226,6 +268,24 @@ public class TodoTaskViewModel : ViewModelBase
     public ICommand RemoveAttachmentCommand { get; }
     public ICommand DeleteTaskCommand { get; }
     public ICommand SaveTaskCommand { get; }
+    public ICommand OpenStepCommand { get; }
+    public ICommand ToggleExpandCommand { get; }
+
+    private void OpenStep(TodoTaskViewModel? step)
+    {
+        if (step is not null)
+            _owner.OpenDetailsForStep(step, TaskID);
+    }
+
+    private void ToggleExpand()
+    {
+        if (!string.IsNullOrWhiteSpace(_owner.SearchText))
+            return;
+
+        IsExpanded = !IsExpanded;
+        _owner.RecordExpand(TaskID, IsExpanded);
+        _owner.ApplyExpand(this);
+    }
 
     public async Task LoadDetailsAsync()
     {
@@ -236,7 +296,6 @@ public class TodoTaskViewModel : ViewModelBase
         if (_planned is null)
             ApplyPlanned(await PlannedTaskRepository.GetPlannedAsync(TaskID));
 
-        await ReloadStepsAsync();
         await ReloadAttachmentsAsync();
         await LoadAssignedAsync();
     }
@@ -313,15 +372,40 @@ public class TodoTaskViewModel : ViewModelBase
         return result;
     }
 
-    private async Task ReloadStepsAsync()
+    internal async Task RefreshChildrenAsync()
     {
         var children = await TaskRepository.GetChildTasksAsync(TaskID, _owner.CurrentUserId);
 
-        Steps.Clear();
+        var existing = Steps.ToDictionary(c => c.TaskID);
+        var rebuilt = new List<TodoTaskViewModel>(children.Count);
         foreach (var child in children)
-            Steps.Add(new TodoTaskViewModel(child, _owner, _statusNames, _levelNames, Assignees, _recurrenceOptions));
+        {
+            rebuilt.Add(existing.TryGetValue(child.TaskID, out var vm)
+                ? vm
+                : new TodoTaskViewModel(child, _owner, _statusNames, _levelNames, Assignees, _recurrenceOptions));
+        }
 
-        UpdateStepsSummary();
+        var changed = rebuilt.Count != Steps.Count;
+        if (!changed)
+        {
+            for (var i = 0; i < rebuilt.Count; i++)
+            {
+                if (!ReferenceEquals(rebuilt[i], Steps[i]))
+                {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!changed)
+        {
+            UpdateStepsSummary();
+            return;
+        }
+
+        SetChildren(rebuilt);
+        _owner.RebuildView();
     }
 
     private async Task ReloadAttachmentsAsync()
@@ -344,7 +428,7 @@ public class TodoTaskViewModel : ViewModelBase
         SelectedAssignee = Assignees.FirstOrDefault(u => u.UserID == assignee.UserID) ?? assignee;
     }
 
-    private void UpdateStepsSummary()
+    internal void UpdateStepsSummary()
     {
         var total = Steps.Count;
         var completed = Steps.Count(s => s.IsCompleted);
@@ -354,7 +438,10 @@ public class TodoTaskViewModel : ViewModelBase
     private async Task AddStepAsync()
     {
         if (string.IsNullOrWhiteSpace(NewStepTitle))
+        {
+            _owner.RaiseToast("Type a step first.");
             return;
+        }
 
         await TaskRepository.AddTaskAsync(
             TaskID,
@@ -367,7 +454,7 @@ public class TodoTaskViewModel : ViewModelBase
             _model.Color);
 
         NewStepTitle = string.Empty;
-        await ReloadStepsAsync();
+        await RefreshChildrenAsync();
         _owner.RaiseToast("Step added");
         await _owner.RefreshCountsAsync();
     }
@@ -396,6 +483,8 @@ public class TodoTaskViewModel : ViewModelBase
         await TaskRepository.DeleteTaskAsync(step.TaskID, _owner.CurrentUserId);
         Steps.Remove(step);
         UpdateStepsSummary();
+        OnPropertyChanged(nameof(HasChildren));
+        _owner.RebuildView();
         _owner.RaiseToast("Step removed");
         await _owner.RefreshCountsAsync();
     }
@@ -430,6 +519,7 @@ public class TodoTaskViewModel : ViewModelBase
     private async Task DeleteAsync()
     {
         await TaskRepository.DeleteTaskAsync(TaskID, _owner.CurrentUserId);
+        _owner.CloseDetailsIfOpen(TaskID);
         _owner.RaiseToast("Task deleted");
         await _owner.RefreshSourceAndViewAsync();
     }

@@ -355,23 +355,10 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="DatePickerTextBox">
-                    <Grid>
-                        <TextBox x:Name="PART_TextBox" Background="Transparent" BorderThickness="0"
-                                 Padding="{TemplateBinding Padding}" VerticalContentAlignment="Center"
-                                 Foreground="{TemplateBinding Foreground}" CaretBrush="{TemplateBinding CaretBrush}"
-                                 Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock x:Name="PART_Watermark" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False"
-                                   Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12"
-                                   Text="{TemplateBinding Text}"/>
-                    </Grid>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="Text" Value="">
-                            <Setter TargetName="PART_Watermark" Property="Visibility" Value="Visible"/>
-                        </Trigger>
-                        <Trigger Property="Text" Value="{x:Null}">
-                            <Setter TargetName="PART_Watermark" Property="Visibility" Value="Visible"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
+                    <TextBox x:Name="PART_TextBox" Background="Transparent" BorderThickness="0"
+                             Padding="{TemplateBinding Padding}" VerticalContentAlignment="Center"
+                             Foreground="{TemplateBinding Foreground}" CaretBrush="{TemplateBinding CaretBrush}"
+                             Text="{Binding Text, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

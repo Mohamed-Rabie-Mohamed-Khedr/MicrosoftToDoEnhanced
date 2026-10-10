@@ -7,7 +7,7 @@
              d:DesignHeight="72" d:DesignWidth="480">
 
     <Border x:Name="Root"
-            Padding="12,10"
+            Padding="{Binding RowPadding}"
             Margin="0,0,0,8"
             MouseLeftButtonUp="OnItemClicked"
             AllowDrop="True">
@@ -40,6 +40,7 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="30"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="3"/>
@@ -48,7 +49,55 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Grid x:Name="DragGrip" Grid.Column="0" Width="16" VerticalAlignment="Center" Margin="-4,0,4,0"
+            <Button Grid.Column="0" Width="24" Height="24" Margin="0,0,6,0"
+                    Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                    Focusable="False" ToolTip="Expand or collapse"
+                    Visibility="{Binding HasChildren, Converter={StaticResource BoolToVisibilityConverter}}"
+                    Command="{Binding ToggleExpandCommand}"
+                    MouseLeftButtonUp="OnExpanderClicked">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+                <Path x:Name="Arrow" Width="11" Height="11" Stretch="Uniform"
+                      Fill="{DynamicResource TextTertiaryBrush}"
+                      Data="M10,5 L6,1 L6,3.5 L0,3.5 L0,6.5 L6,6.5 L6,9 Z">
+                    <Path.Style>
+                        <Style TargetType="Path">
+                            <Setter Property="Opacity" Value="0.65"/>
+                            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+                            <Setter Property="RenderTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="0"/>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                    <Setter Property="RenderTransform">
+                                        <Setter.Value>
+                                            <RotateTransform Angle="90"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Path.Style>
+                </Path>
+            </Button>
+
+            <Grid x:Name="DragGrip" Grid.Column="1" Width="16" VerticalAlignment="Center" Margin="-4,0,4,0"
                   Background="Transparent"
                   Cursor="SizeAll" ToolTip="Drag to reorder"
                   Visibility="{Binding CanReorder, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -56,7 +105,7 @@
                       Data="M0,0 h2 v2 h-2 Z M4,0 h2 v2 h-2 Z M0,4 h2 v2 h-2 Z M4,4 h2 v2 h-2 Z M0,8 h2 v2 h-2 Z M4,8 h2 v2 h-2 Z"/>
             </Grid>
 
-            <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
+            <CheckBox Grid.Column="2" VerticalAlignment="Center" Margin="0,0,10,0"
                       IsChecked="{Binding IsCompleted, Mode=TwoWay}"
                       Command="{Binding DataContext.ToggleTaskStatusCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                       CommandParameter="{Binding}"
@@ -98,10 +147,10 @@
                 </CheckBox.Template>
             </CheckBox>
 
-            <Border Grid.Column="2" CornerRadius="1.5" VerticalAlignment="Stretch"
+            <Border Grid.Column="3" CornerRadius="1.5" VerticalAlignment="Stretch"
                     Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
 
-            <StackPanel Grid.Column="4" VerticalAlignment="Center">
+            <StackPanel Grid.Column="5" VerticalAlignment="Center">
                 <TextBlock FontSize="13.5" Foreground="{DynamicResource TextPrimaryBrush}"
                            TextTrimming="CharacterEllipsis" Text="{Binding TaskName}">
                     <TextBlock.Style>
@@ -173,7 +222,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+            <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
                 <Border Margin="0,0,10,0">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource BadgeStyle}">

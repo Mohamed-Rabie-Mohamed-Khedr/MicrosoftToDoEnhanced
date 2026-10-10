@@ -35,6 +35,12 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource IconButtonStyle}" ToolTip="Back to parent task"
+                        Visibility="{Binding DataContext.HasDetailParent, Converter={StaticResource BoolToVisibilityConverter}, RelativeSource={RelativeSource AncestorType=Window}}"
+                        Command="{Binding DataContext.BackDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <Path Width="10" Height="10" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          Data="M0,5 L4,1 L4,3.5 L10,3.5 L10,6.5 L4,6.5 L4,9 Z"/>
+                </Button>
                 <Border Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center" Margin="0,0,8,0"
                         Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
                 <TextBlock Text="Task details" Style="{StaticResource SectionTitleTextStyle}"/>
@@ -57,7 +63,10 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <CheckBox Style="{StaticResource AccentCheckBoxStyle}" VerticalAlignment="Top" Margin="0,8,10,0"
-                              IsChecked="{Binding IsCompleted, Mode=TwoWay}"/>
+                              IsChecked="{Binding IsCompleted, Mode=TwoWay}"
+                              Command="{Binding DataContext.ToggleTaskStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                              CommandParameter="{Binding}"
+                              ClickMode="Press" Cursor="Hand"/>
                     <TextBox Grid.Column="1" Text="{Binding TaskName, UpdateSourceTrigger=PropertyChanged}"
                              FontSize="16" FontWeight="SemiBold" Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"
@@ -109,13 +118,15 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Margin="0,18,0,6">
+                <Grid Margin="0,18,0,6"
+                      Visibility="{Binding IsStep, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                     <TextBlock Text="Steps" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
                     <TextBlock HorizontalAlignment="Right" Style="{StaticResource CaptionTextStyle}"
                                Text="{Binding StepsSummary}"/>
                 </Grid>
 
-                <Border Style="{StaticResource CardStyle}" Padding="8,6" Effect="{x:Null}">
+                <Border Style="{StaticResource CardStyle}" Padding="8,6" Effect="{x:Null}"
+                        Visibility="{Binding IsStep, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                     <StackPanel>
                         <ItemsControl ItemsSource="{Binding Steps}">
                             <ItemsControl.ItemTemplate>
@@ -143,13 +154,22 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <Button Grid.Column="2" Style="{StaticResource IconButtonStyle}" Width="24" Height="24"
-                                                ToolTip="Remove step"
-                                                Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Path Width="8" Height="8" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                  Data="M0,1.2 L1.2,0 L4,2.8 L6.8,0 L8,1.2 L5.2,4 L8,6.8 L6.8,8 L4,5.2 L1.2,8 L0,6.8 L2.8,4 Z"/>
-                                        </Button>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <Button Style="{StaticResource IconButtonStyle}" Width="24" Height="24"
+                                                    ToolTip="Edit step"
+                                                    Command="{Binding DataContext.OpenStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Width="9" Height="9" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      Data="M3,17.25 V21 h3.75 L17.81,9.94 l-3.75,-3.75 L3,17.25 Z M20.71,7.04 c0.39,-0.39 0.39,-1.02 0,-1.41 l-2.34,-2.34 c-0.39,-0.39 -1.02,-0.39 -1.41,0 l-1.83,1.83 l3.75,3.75 L20.71,7.04 Z"/>
+                                            </Button>
+                                            <Button Style="{StaticResource IconButtonStyle}" Width="24" Height="24"
+                                                    ToolTip="Remove step"
+                                                    Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Width="8" Height="8" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                      Data="M0,1.2 L1.2,0 L4,2.8 L6.8,0 L8,1.2 L5.2,4 L8,6.8 L6.8,8 L4,5.2 L1.2,8 L0,6.8 L2.8,4 Z"/>
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -160,13 +180,18 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Width="18" Height="18" CornerRadius="9" VerticalAlignment="Center" Margin="0,0,10,0"
-                                    BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1.2">
-                                <Path Width="8" Height="8" Stretch="Uniform" Fill="{DynamicResource AccentBrush}"
-                                      Data="M3,0 h2 v3 h3 v2 h-3 v3 h-2 v-3 h-3 v-2 h3 Z"/>
-                            </Border>
-                            <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}" MinHeight="28"
-                                     Background="Transparent" BorderThickness="0"
+                            <Button Grid.Column="0" x:Name="AddStepButton" Style="{StaticResource IconButtonStyle}"
+                                    Width="28" Height="28" VerticalAlignment="Center" Margin="0,0,10,0"
+                                    ToolTip="Add step" Command="{Binding AddStepCommand}"
+                                    Click="AddStepButton_Click">
+                                <Border Width="18" Height="18" CornerRadius="9"
+                                        BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1.2">
+                                    <Path Width="8" Height="8" Stretch="Uniform" Fill="{DynamicResource AccentBrush}"
+                                          Data="M3,0 h2 v3 h3 v2 h-3 v3 h-2 v-3 h-3 v-2 h3 Z"/>
+                                </Border>
+                            </Button>
+                            <TextBox Grid.Column="1" x:Name="StepInput" Style="{StaticResource ModernTextBoxStyle}"
+                                     MinHeight="28" Background="Transparent" BorderThickness="0"
                                      Text="{Binding NewStepTitle, UpdateSourceTrigger=PropertyChanged}">
                                 <TextBox.InputBindings>
                                     <KeyBinding Key="Return" Command="{Binding AddStepCommand}"/>

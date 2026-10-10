@@ -34,6 +34,11 @@ public partial class TaskItem : UserControl
             listBoxItem.IsSelected = true;
     }
 
+    private void OnExpanderClicked(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+    }
+
     private static bool ReorderAllowed(object? dataContext) =>
         dataContext is not ViewModels.TodoTaskViewModel task || task.CanReorder;
 

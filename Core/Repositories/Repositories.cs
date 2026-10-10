@@ -165,12 +165,32 @@ public static class TaskRepository
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
-    public static Task ReorderTasksAsync(int userId, int? groupId, IReadOnlyList<int> orderedTaskIds) =>
+    public static async Task<List<TodoTask>> GetChildTasksByIdsAsync(
+        IReadOnlyList<int> parentIds, int actingUserId)
+    {
+        if (parentIds.Count == 0)
+            return new List<TodoTask>();
+
+        var rows = await SqlHelper.QueryAsync("GetChildTasksByIds", true,
+            new SqlParameter("@TaskParentIDs", SqlDbType.NVarChar, -1)
+            {
+                Value = SqlHelper.TaskIdsJson(parentIds)
+            },
+            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        return rows.Select(r => new TodoTask(r)).ToList();
+    }
+
+    public static Task ReorderTasksAsync(
+        int userId, int? groupId, int? parentTaskId, IReadOnlyList<int> orderedTaskIds) =>
         SqlHelper.ExecuteAsync("ReorderTasks", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
             new SqlParameter("@GroupID", SqlDbType.Int)
             {
                 Value = groupId ?? (object)DBNull.Value
+            },
+            new SqlParameter("@TaskParentID", SqlDbType.Int)
+            {
+                Value = parentTaskId ?? (object)DBNull.Value
             },
             new SqlParameter("@TaskIDs", SqlDbType.NVarChar, -1)
             {

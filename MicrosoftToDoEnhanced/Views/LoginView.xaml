@@ -105,6 +105,10 @@
                                    Text="{Binding LoginInfoMessage}"
                                    Visibility="{Binding LoginInfoMessage, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}"/>
 
+                        <CheckBox Style="{StaticResource AccentCheckBoxStyle}" Margin="0,14,0,0"
+                                  Content="Remember me"
+                                  IsChecked="{Binding IsRememberMe, Mode=TwoWay}"/>
+
                         <Button Style="{StaticResource PrimaryButtonStyle}" Content="Sign in" Margin="0,18,0,0"
                                 Command="{Binding SignInCommand}"
                                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 
 namespace MicrosoftToDoEnhanced.Views;
@@ -8,4 +9,6 @@ public partial class TaskDetailPanel : UserControl
     {
         InitializeComponent();
     }
+
+    private void AddStepButton_Click(object sender, RoutedEventArgs e) => StepInput.Focus();
 }

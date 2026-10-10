@@ -687,10 +687,30 @@ BEGIN
 END
 GO
 
+CREATE PROCEDURE dbo.GetChildTasksByIds
+    @TaskParentIDs NVARCHAR(MAX),
+    @ActingUserID  INT
+AS
+BEGIN
+    DECLARE @IsGlobalAdmin BIT =
+        CASE WHEN EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @ActingUserID AND PermissionID = 2)
+             THEN 1 ELSE 0 END;
+    SELECT T.* FROM OPENJSON(@TaskParentIDs) J
+    JOIN dbo.Tasks T ON T.TaskParentID = CAST(J.value AS INT)
+    WHERE (T.GroupID IS NOT NULL
+           AND (@IsGlobalAdmin = 1
+                OR EXISTS (SELECT 1 FROM dbo.Groups G WHERE G.GroupID = T.GroupID AND G.AdminID = @ActingUserID)
+                OR EXISTS (SELECT 1 FROM dbo.GroupMembers M WHERE M.GroupID = T.GroupID AND M.UserID = @ActingUserID)))
+       OR (T.GroupID IS NULL AND T.UserID = @ActingUserID)
+    ORDER BY T.TaskParentID, T.Ranking;
+END
+GO
+
 CREATE PROCEDURE dbo.ReorderTasks
-    @UserID  INT,
-    @GroupID INT = NULL,
-    @TaskIDs NVARCHAR(MAX)
+    @UserID      INT,
+    @GroupID     INT = NULL,
+    @TaskParentID INT = NULL,
+    @TaskIDs     NVARCHAR(MAX)
 AS
 BEGIN
     IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@UserID, @GroupID) = 0
@@ -701,7 +721,8 @@ BEGIN
                ROW_NUMBER() OVER (ORDER BY ISNULL(CAST(J.[key] AS INT), 2147483647), T.Ranking) AS NewRanking
         FROM dbo.Tasks T
         LEFT JOIN OPENJSON(@TaskIDs) J ON CAST(J.value AS INT) = T.TaskID
-        WHERE T.TaskParentID IS NULL
+        WHERE ((@TaskParentID IS NULL AND T.TaskParentID IS NULL)
+               OR T.TaskParentID = @TaskParentID)
           AND ((@GroupID IS NULL AND T.UserID = @UserID AND T.GroupID IS NULL)
                OR T.GroupID = @GroupID)
     )
@@ -761,6 +782,22 @@ BEGIN
     WHERE T.TaskParentID IS NULL
       AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
       AND T.UserID = @UserID AND T.GroupID IS NULL;
+
+    SELECT @TodayCount = @TodayCount + COUNT(*)
+    FROM dbo.Tasks T
+    INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND T.GroupID IS NULL
+      AND T.TaskParentID IS NOT NULL
+      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+      AND CAST(P.PlannedStartDate AS DATE) <= @Today
+      AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
+      AND NOT EXISTS (SELECT 1
+                      FROM dbo.Tasks TP
+                      INNER JOIN dbo.Planned PP ON PP.TaskID = TP.TaskID
+                      WHERE TP.TaskID = T.TaskParentID
+                        AND CAST(PP.PlannedStartDate AS DATE) <= @Today
+                        AND (PP.PlannedEndDate IS NULL OR CAST(PP.PlannedEndDate AS DATE) >= @Today));
+
     SELECT @AllCount AS AllCount, @TodayCount AS TodayCount,
            @ImportantCount AS ImportantCount, @PlannedCount AS PlannedCount;
 END
@@ -875,11 +912,28 @@ CREATE PROCEDURE dbo.GetTasksPlanned
 AS
 BEGIN
     DECLARE @Today DATE = CAST(GETDATE() AS DATE);
+
+    IF @Scope = 0
+    BEGIN
+        SELECT T.* FROM dbo.Tasks T
+        INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
+        WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
+        ORDER BY CAST(P.PlannedStartDate AS DATE), T.Ranking;
+        RETURN;
+    END
+
     SELECT T.* FROM dbo.Tasks T
-    JOIN dbo.Planned P ON T.TaskID = P.TaskID
-    WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
-      AND (@Scope = 0 OR (CAST(P.PlannedStartDate AS DATE) <= @Today
-                          AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)))
+    INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
+    WHERE T.UserID = @UserID AND T.GroupID IS NULL
+      AND CAST(P.PlannedStartDate AS DATE) <= @Today
+      AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
+      AND ( T.TaskParentID IS NULL
+         OR NOT EXISTS (SELECT 1
+                        FROM dbo.Tasks TP
+                        INNER JOIN dbo.Planned PP ON PP.TaskID = TP.TaskID
+                        WHERE TP.TaskID = T.TaskParentID
+                          AND CAST(PP.PlannedStartDate AS DATE) <= @Today
+                          AND (PP.PlannedEndDate IS NULL OR CAST(PP.PlannedEndDate AS DATE) >= @Today)))
     ORDER BY CAST(P.PlannedStartDate AS DATE), T.Ranking;
 END
 GO

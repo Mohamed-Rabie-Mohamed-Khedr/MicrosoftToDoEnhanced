@@ -20,6 +20,7 @@ namespace MicrosoftToDoEnhanced
             viewModel.ToastRequested += (_, message) => ShowToast(message);
             viewModel.SignOutRequested += (_, _) =>
             {
+                Views.RememberedLoginStore.Clear();
                 DataContext = null;
                 var login = new Views.LoginView();
                 login.Show();

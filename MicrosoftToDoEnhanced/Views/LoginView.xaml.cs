@@ -1,5 +1,8 @@
 using System.ComponentModel;
+using System.IO;
 using System.Net.Mail;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -18,6 +21,18 @@ public partial class LoginView : Window
         InitializeComponent();
         DataContext = _viewModel = new LoginViewModel(OpenMainWindow);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        if (_viewModel.LoginPassword is not null)
+            LoginPasswordBox.Password = _viewModel.LoginPassword;
+
+        if (_viewModel.IsRememberMe)
+            Loaded += OnLoadedAutoSignIn;
+    }
+
+    private async void OnLoadedAutoSignIn(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoadedAutoSignIn;
+        await _viewModel.SignInAutomaticAsync();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -65,6 +80,7 @@ public sealed class LoginViewModel : ViewModelBase
     private string _selectedAccentHex = "#0078D4";
     private bool _isRegisterMode;
     private bool _isBusy;
+    private bool _isRememberMe;
 
     private string? _loginError;
     private string? _loginInfoMessage;
@@ -81,6 +97,13 @@ public sealed class LoginViewModel : ViewModelBase
         SignInCommand = new AsyncRelayCommand(SignInAsync, onError: OnCommandError);
         RegisterCommand = new AsyncRelayCommand(RegisterAsync, onError: OnCommandError);
         ToggleModeCommand = new RelayCommand(ToggleMode);
+
+        if (RememberedLoginStore.Load() is { } remembered)
+        {
+            _loginUserName = remembered.UserName;
+            _loginPassword = remembered.Password;
+            _isRememberMe = true;
+        }
     }
 
     private void OnCommandError(Exception exception)
@@ -167,6 +190,16 @@ public sealed class LoginViewModel : ViewModelBase
         private set => SetProperty(ref _isBusy, value);
     }
 
+    public bool IsRememberMe
+    {
+        get => _isRememberMe;
+        set
+        {
+            if (SetProperty(ref _isRememberMe, value) && !value)
+                RememberedLoginStore.Clear();
+        }
+    }
+
     public string? LoginError
     {
         get => _loginError;
@@ -220,7 +253,11 @@ public sealed class LoginViewModel : ViewModelBase
         RegisterPasswordError = null;
     }
 
-    private async Task SignInAsync()
+    private async Task SignInAsync() => await SignInCoreAsync(isAutomatic: false);
+
+    internal async Task SignInAutomaticAsync() => await SignInCoreAsync(isAutomatic: true);
+
+    private async Task SignInCoreAsync(bool isAutomatic)
     {
         IsBusy = true;
         try
@@ -235,7 +272,8 @@ public sealed class LoginViewModel : ViewModelBase
                 return;
             }
 
-            var result = await UserRepository.SignInAsync(LoginUserName, LoginPassword ?? string.Empty);
+            var password = LoginPassword ?? string.Empty;
+            var result = await UserRepository.SignInAsync(LoginUserName, password);
 
             LoginPassword = null;
 
@@ -244,8 +282,17 @@ public sealed class LoginViewModel : ViewModelBase
                 LoginError = result.IsThrottled
                     ? $"Too many failed attempts. Try again in {Math.Ceiling(result.RetryAfter.TotalSeconds)} second(s)."
                     : "Incorrect username or password";
+
+                if (isAutomatic)
+                    RememberedLoginStore.Clear();
+
                 return;
             }
+
+            if (IsRememberMe)
+                RememberedLoginStore.Save(LoginUserName.Trim(), password);
+            else
+                RememberedLoginStore.Clear();
 
             _onAuthenticated(result.User!);
         }
@@ -345,4 +392,150 @@ public sealed class LoginViewModel : ViewModelBase
             return false;
         }
     }
+}
+
+public static class RememberedLoginStore
+{
+    private const string Description = "MicrosoftToDoEnhanced remembered sign-in";
+    private const int CryptProtectUiForbidden = 0x1;
+
+    private static readonly string FilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MicrosoftToDoEnhanced", "remember.dat");
+
+    public static (string UserName, string Password)? Load()
+    {
+        try
+        {
+            if (!File.Exists(FilePath))
+                return null;
+
+            return Deserialize(Unprotect(File.ReadAllBytes(FilePath)));
+        }
+        catch (Exception)
+        {
+            Clear();
+            return null;
+        }
+    }
+
+    public static void Save(string userName, string password)
+    {
+        var directory = Path.GetDirectoryName(FilePath);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllBytes(FilePath, Protect(Serialize(userName, password)));
+    }
+
+    public static void Clear()
+    {
+        try
+        {
+            if (File.Exists(FilePath))
+                File.Delete(FilePath);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static byte[] Serialize(string userName, string password)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(userName);
+            writer.Write(password);
+        }
+
+        return stream.ToArray();
+    }
+
+    private static (string UserName, string Password)? Deserialize(byte[] data)
+    {
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream, Encoding.UTF8);
+
+        var userName = reader.ReadString();
+        var password = reader.ReadString();
+
+        return userName.Length == 0 ? null : (userName, password);
+    }
+
+    private static byte[] Protect(byte[] data)
+    {
+        var input = default(NativeBlob);
+        var output = default(NativeBlob);
+
+        try
+        {
+            input.Size = data.Length;
+            input.Data = Marshal.AllocHGlobal(data.Length);
+            Marshal.Copy(data, 0, input.Data, data.Length);
+
+            if (!CryptProtectData(ref input, Description, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
+                    CryptProtectUiForbidden, out output))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+
+            var protectedData = new byte[output.Size];
+            Marshal.Copy(output.Data, protectedData, 0, output.Size);
+            return protectedData;
+        }
+        finally
+        {
+            if (input.Data != IntPtr.Zero)
+                Marshal.FreeHGlobal(input.Data);
+            if (output.Data != IntPtr.Zero)
+                LocalFree(output.Data);
+        }
+    }
+
+    private static byte[] Unprotect(byte[] data)
+    {
+        var input = default(NativeBlob);
+        var output = default(NativeBlob);
+
+        try
+        {
+            input.Size = data.Length;
+            input.Data = Marshal.AllocHGlobal(data.Length);
+            Marshal.Copy(data, 0, input.Data, data.Length);
+
+            if (!CryptUnprotectData(ref input, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero,
+                    CryptProtectUiForbidden, out output))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+
+            var plainData = new byte[output.Size];
+            Marshal.Copy(output.Data, plainData, 0, output.Size);
+            return plainData;
+        }
+        finally
+        {
+            if (input.Data != IntPtr.Zero)
+                Marshal.FreeHGlobal(input.Data);
+            if (output.Data != IntPtr.Zero)
+                LocalFree(output.Data);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeBlob
+    {
+        public int Size;
+        public IntPtr Data;
+    }
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool CryptProtectData(
+        ref NativeBlob dataIn, string? dataDescr, IntPtr optionalEntropy, IntPtr reserved,
+        IntPtr promptStruct, int flags, out NativeBlob dataOut);
+
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool CryptUnprotectData(
+        ref NativeBlob dataIn, IntPtr dataDescr, IntPtr optionalEntropy, IntPtr reserved,
+        IntPtr promptStruct, int flags, out NativeBlob dataOut);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr LocalFree(IntPtr memory);
 }

@@ -19,6 +19,9 @@ public class MainViewModel : ViewModelBase
     private Group? _selectedGroup;
     private SmartViewItem? _selectedSmartView;
     private TodoTaskViewModel? _selectedTask;
+    private TodoTaskViewModel? _detailTask;
+    private int? _detailParentId;
+    private bool _rebuildingSelection;
     private bool _sortByImportance;
     private string? _searchText;
     private string? _newTaskTitle;
@@ -26,9 +29,11 @@ public class MainViewModel : ViewModelBase
     private string? _currentViewSubtitle;
     private int? _preservedSelectedTaskId;
     private List<TodoTask> _sourceTasks = new();
+    private Dictionary<int, List<TodoTask>> _sourceChildren = new();
     private Dictionary<int, PlannedTask> _sourcePlanned = new();
     private Dictionary<int, TaskListExtras> _sourceExtras = new();
     private List<TodoTaskViewModel> _sourceViewModels = new();
+    private HashSet<int> _expandedTaskIds = new();
     private CancellationTokenSource? _searchDebounceCts;
     private bool _initialized;
 
@@ -50,6 +55,7 @@ public class MainViewModel : ViewModelBase
         CreateGroupCommand = new AsyncRelayCommand(CreateGroupAsync, onError: OnAsyncCommandError);
         SignOutCommand = new RelayCommand(() => SignOutRequested?.Invoke(this, EventArgs.Empty));
         CloseDetailsCommand = new RelayCommand(() => SelectedTask = null);
+        BackDetailsCommand = new RelayCommand(BackToParent);
         ToggleTaskStatusCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleTaskStatusAsync, onError: OnAsyncCommandError);
         ReorderTasksCommand = new AsyncRelayCommand<ReorderPayload>(ReorderTasksAsync, onError: OnAsyncCommandError);
     }
@@ -68,6 +74,7 @@ public class MainViewModel : ViewModelBase
     public ICommand CreateGroupCommand { get; }
     public ICommand SignOutCommand { get; }
     public ICommand CloseDetailsCommand { get; }
+    public ICommand BackDetailsCommand { get; }
     public AsyncRelayCommand<TodoTaskViewModel> ToggleTaskStatusCommand { get; }
     public AsyncRelayCommand<ReorderPayload> ReorderTasksCommand { get; }
 
@@ -119,18 +126,97 @@ public class MainViewModel : ViewModelBase
         get => _selectedTask;
         set
         {
-            if (SetProperty(ref _selectedTask, value))
-            {
-                OnPropertyChanged(nameof(IsDetailOpen));
+            var changed = SetProperty(ref _selectedTask, value);
 
-                if (value is not null)
-                    value.LoadDetailsAsync().SafeFireAndForget(OnAsyncCommandError);
+            if (_rebuildingSelection)
+                return;
+
+            if (value is null)
+            {
+                ShowDetail(null, null);
+                return;
             }
+
+            if (changed || !ReferenceEquals(DetailTask, value))
+                ShowDetail(value, value.TaskParentID);
         }
     }
 
-    public bool IsDetailOpen => SelectedTask is not null;
+    public TodoTaskViewModel? DetailTask
+    {
+        get => _detailTask;
+        private set
+        {
+            if (!SetProperty(ref _detailTask, value))
+                return;
+
+            OnPropertyChanged(nameof(IsDetailOpen));
+            OnPropertyChanged(nameof(HasDetailParent));
+        }
+    }
+
+    public bool IsDetailOpen => DetailTask is not null;
+    public bool HasDetailParent => _detailParentId is not null;
     public bool HasTasks => Tasks.Count > 0;
+
+    public void OpenDetailsForStep(TodoTaskViewModel step, int parentTaskId) =>
+        ShowDetail(step, parentTaskId);
+
+    public void CloseDetailsIfOpen(int taskId)
+    {
+        if (DetailTask?.TaskID == taskId)
+            ShowDetail(null, null);
+    }
+
+    private void BackToParent()
+    {
+        var parent = _detailParentId is int parentId
+            ? Tasks.FirstOrDefault(t => t.TaskID == parentId)
+            : null;
+
+        if (parent is not null)
+            SelectedTask = parent;
+        else
+            ShowDetail(null, null);
+    }
+
+    internal void RecordExpand(int taskId, bool expanded)
+    {
+        if (expanded)
+            _expandedTaskIds.Add(taskId);
+        else
+            _expandedTaskIds.Remove(taskId);
+    }
+
+    internal void ApplyExpand(TodoTaskViewModel parent)
+    {
+        var index = Tasks.IndexOf(parent);
+        if (index < 0)
+            return;
+
+        var childIndex = index + 1;
+        while (childIndex < Tasks.Count && Tasks[childIndex].TaskParentID == parent.TaskID)
+            Tasks.RemoveAt(childIndex);
+
+        if (!parent.IsExpanded)
+            return;
+
+        for (var i = 0; i < parent.Steps.Count; i++)
+        {
+            var child = parent.Steps[i];
+            child.CanReorder = CanReorderTasks;
+            Tasks.Insert(childIndex + i, child);
+        }
+    }
+
+    private void ShowDetail(TodoTaskViewModel? task, int? parentId)
+    {
+        _detailParentId = parentId;
+        DetailTask = task;
+
+        if (task is not null)
+            task.LoadDetailsAsync().SafeFireAndForget(OnAsyncCommandError);
+    }
 
     public bool SortByImportance
     {
@@ -252,6 +338,7 @@ public class MainViewModel : ViewModelBase
     private async Task LoadSourceAsync()
     {
         _sourceTasks = new List<TodoTask>();
+        _sourceChildren = new Dictionary<int, List<TodoTask>>();
         _sourcePlanned = new Dictionary<int, PlannedTask>();
         _sourceExtras = new Dictionary<int, TaskListExtras>();
         _preservedSelectedTaskId = SelectedTask?.TaskID;
@@ -288,8 +375,20 @@ public class MainViewModel : ViewModelBase
 
         if (_sourceTasks.Count > 0)
         {
-            var sourceIds = _sourceTasks.Select(t => t.TaskID).ToList();
-            foreach (var extras in await TaskRepository.GetTaskListExtrasAsync(sourceIds, CurrentUserId))
+            var parentIds = _sourceTasks.Select(t => t.TaskID).ToList();
+
+            foreach (var child in await TaskRepository.GetChildTasksByIdsAsync(parentIds, CurrentUserId))
+            {
+                var parentId = child.TaskParentID!.Value;
+                if (!_sourceChildren.TryGetValue(parentId, out var siblings))
+                    _sourceChildren[parentId] = siblings = new List<TodoTask>();
+                siblings.Add(child);
+            }
+
+            var allIds = new List<int>(parentIds);
+            allIds.AddRange(_sourceChildren.Values.SelectMany(v => v).Select(t => t.TaskID));
+
+            foreach (var extras in await TaskRepository.GetTaskListExtrasAsync(allIds, CurrentUserId))
                 _sourceExtras[extras.TaskID] = extras;
         }
 
@@ -301,17 +400,27 @@ public class MainViewModel : ViewModelBase
         var built = new List<TodoTaskViewModel>(_sourceTasks.Count);
         foreach (var task in _sourceTasks)
         {
-            var viewModel = new TodoTaskViewModel(task, this, _statusNames, _levelNames, _assignees, _recurrenceOptions);
+            var viewModel = CreateViewModel(task);
 
-            if (_sourcePlanned.TryGetValue(task.TaskID, out var planned))
-                viewModel.ApplyPlanned(planned);
-            if (_sourceExtras.TryGetValue(task.TaskID, out var extras))
-                viewModel.ApplyListExtras(extras);
+            if (_sourceChildren.TryGetValue(task.TaskID, out var children))
+                viewModel.SetChildren(children.Select(CreateViewModel));
 
             built.Add(viewModel);
         }
 
         _sourceViewModels = built;
+    }
+
+    private TodoTaskViewModel CreateViewModel(TodoTask task)
+    {
+        var viewModel = new TodoTaskViewModel(task, this, _statusNames, _levelNames, _assignees, _recurrenceOptions);
+
+        if (_sourcePlanned.TryGetValue(task.TaskID, out var planned))
+            viewModel.ApplyPlanned(planned);
+        if (_sourceExtras.TryGetValue(task.TaskID, out var extras))
+            viewModel.ApplyListExtras(extras);
+
+        return viewModel;
     }
 
     private async Task LoadPlannedSourceAsync(PlannedScope scope)
@@ -330,46 +439,95 @@ public class MainViewModel : ViewModelBase
 
         foreach (var task in pending)
         {
-            if (!plannedByTask.TryGetValue(task.TaskID, out var planned))
-                continue;
+            if (plannedByTask.TryGetValue(task.TaskID, out var planned))
+                _sourcePlanned[task.TaskID] = planned;
 
             _sourceTasks.Add(task);
-            _sourcePlanned[task.TaskID] = planned;
         }
     }
 
     public void RebuildView()
     {
         _preservedSelectedTaskId = SelectedTask?.TaskID;
+        var preservedDetail = DetailTask;
+        var preservedDetailParentId = _detailParentId;
 
-        IEnumerable<TodoTaskViewModel> source = _sourceViewModels;
+        var searching = !string.IsNullOrWhiteSpace(SearchText);
+        var search = searching ? SearchText!.Trim() : null;
 
-        if (!string.IsNullOrWhiteSpace(SearchText))
+        var roots = _sourceViewModels.AsEnumerable();
+        if (searching)
+            roots = roots.Where(t => Matches(t, search!) || t.Steps.Any(s => Matches(s, search!)));
+
+        roots = SortByImportance
+            ? roots.OrderByDescending(t => t.LevelOfImportanceId).ThenBy(t => t.Ranking)
+            : roots.OrderBy(t => t.Ranking).ThenByDescending(t => t.LevelOfImportanceId);
+
+        var viewModels = new List<TodoTaskViewModel>(_sourceViewModels.Count);
+        foreach (var parent in roots)
         {
-            var search = SearchText.Trim();
-            source = source.Where(t => t.TaskName.Contains(search, StringComparison.OrdinalIgnoreCase));
+            parent.CanReorder = CanReorderTasks;
+            parent.IsExpanded = searching || _expandedTaskIds.Contains(parent.TaskID);
+            viewModels.Add(parent);
+
+            var parentMatches = !searching || Matches(parent, search!);
+            foreach (var child in parent.Steps)
+            {
+                if (searching)
+                {
+                    if (!parentMatches && !Matches(child, search!))
+                        continue;
+                }
+                else if (!parent.IsExpanded)
+                {
+                    continue;
+                }
+
+                child.CanReorder = CanReorderTasks;
+                viewModels.Add(child);
+            }
         }
 
-        var ordered = SortByImportance
-            ? source.OrderByDescending(t => t.LevelOfImportanceId).ThenBy(t => t.Ranking)
-            : source.OrderBy(t => t.Ranking).ThenByDescending(t => t.LevelOfImportanceId);
-
-        var viewModels = ordered.ToList();
-
+        _rebuildingSelection = true;
         Tasks.Clear();
         foreach (var viewModel in viewModels)
-        {
-            viewModel.CanReorder = CanReorderTasks;
             Tasks.Add(viewModel);
-        }
 
         SelectedTask = _preservedSelectedTaskId is int preservedId
             ? viewModels.FirstOrDefault(t => t.TaskID == preservedId)
             : null;
+        _rebuildingSelection = false;
+
+        if (preservedDetail is { TaskParentID: not null })
+        {
+            var refreshedParent = preservedDetailParentId is int detailParentId
+                ? _sourceViewModels.FirstOrDefault(t => t.TaskID == detailParentId)
+                : null;
+
+            if (refreshedParent is null)
+            {
+                ShowDetail(null, null);
+            }
+            else
+            {
+                var refreshedStep = refreshedParent.Steps.FirstOrDefault(t => t.TaskID == preservedDetail.TaskID)
+                    ?? viewModels.FirstOrDefault(t => t.TaskID == preservedDetail.TaskID);
+
+                if (refreshedStep is not null)
+                    ShowDetail(refreshedStep, refreshedParent.TaskID);
+            }
+        }
+        else if (preservedDetail is not null)
+        {
+            ShowDetail(_sourceViewModels.FirstOrDefault(t => t.TaskID == preservedDetail.TaskID), null);
+        }
 
         CurrentViewSubtitle = $"{Tasks.Count} task{(Tasks.Count == 1 ? "" : "s")}";
         OnPropertyChanged(nameof(HasTasks));
     }
+
+    private static bool Matches(TodoTaskViewModel task, string search) =>
+        task.TaskName.Contains(search, StringComparison.OrdinalIgnoreCase);
 
     private async Task RebuildViewDebouncedAsync(CancellationTokenSource cts)
     {
@@ -445,6 +603,9 @@ public class MainViewModel : ViewModelBase
             task.DueDate = nextStart;
         task.EndDate = result.PlannedEndDate;
 
+        if (task.TaskParentID is int parentId)
+            _sourceViewModels.FirstOrDefault(p => p.TaskID == parentId)?.UpdateStepsSummary();
+
         RebuildView();
         await RefreshCountsAsync();
 
@@ -479,8 +640,23 @@ public class MainViewModel : ViewModelBase
 
         var dragged = payload.Dragged;
         var target = payload.Target;
-        var fromIndex = Tasks.IndexOf(dragged);
-        var targetIndex = Tasks.IndexOf(target);
+
+        if (dragged.TaskParentID != target.TaskParentID)
+        {
+            RaiseToast("Only tasks in the same list can be reordered.");
+            return;
+        }
+
+        if (dragged.TaskParentID is int parentTaskId)
+            await ReorderChildrenAsync(parentTaskId, dragged, target);
+        else
+            await ReorderParentsAsync(dragged, target);
+    }
+
+    private async Task ReorderParentsAsync(TodoTaskViewModel dragged, TodoTaskViewModel target)
+    {
+        var fromIndex = _sourceViewModels.IndexOf(dragged);
+        var targetIndex = _sourceViewModels.IndexOf(target);
 
         if (fromIndex < 0 || targetIndex < 0)
         {
@@ -494,41 +670,28 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        var fullFrom = _sourceTasks.FindIndex(t => t.TaskID == dragged.TaskID);
-        var insertAt = _sourceTasks.FindIndex(t => t.TaskID == target.TaskID);
-        if (fullFrom < 0 || insertAt < 0)
-        {
-            RaiseToast("That task is not part of the current list, so it cannot be reordered.");
-            return;
-        }
-
-        var draggedTask = _sourceTasks[fullFrom];
-        var draggedViewModel = _sourceViewModels[fullFrom];
-
         var sourceTasksSnapshot = _sourceTasks.ToList();
         var sourceViewModelsSnapshot = _sourceViewModels.ToList();
 
         try
         {
             var movingDown = targetIndex > fromIndex;
+            var draggedTask = _sourceTasks[fromIndex];
 
-            Tasks.RemoveAt(fromIndex);
-            Tasks.Insert(Tasks.IndexOf(target) + (movingDown ? 1 : 0), dragged);
+            _sourceTasks.RemoveAt(fromIndex);
+            _sourceViewModels.RemoveAt(fromIndex);
 
-            _sourceTasks.RemoveAt(fullFrom);
-            _sourceViewModels.RemoveAt(fullFrom);
-
-            var destination = _sourceTasks.FindIndex(t => t.TaskID == target.TaskID) + (movingDown ? 1 : 0);
+            var destination = _sourceViewModels.IndexOf(target) + (movingDown ? 1 : 0);
 
             _sourceTasks.Insert(destination, draggedTask);
-            _sourceViewModels.Insert(destination, draggedViewModel);
+            _sourceViewModels.Insert(destination, dragged);
 
             for (var i = 0; i < _sourceTasks.Count; i++)
                 _sourceTasks[i].Ranking = i + 1;
 
-            var fullOrder = _sourceTasks.Select(t => t.TaskID).ToList();
             await TaskRepository.ReorderTasksAsync(
-                CurrentUserId, _selectedGroup?.GroupID, fullOrder);
+                CurrentUserId, _selectedGroup?.GroupID, null,
+                _sourceTasks.Select(t => t.TaskID).ToList());
         }
         catch
         {
@@ -540,6 +703,61 @@ public class MainViewModel : ViewModelBase
             throw;
         }
 
+        RebuildView();
+        RaiseToast("Order updated");
+    }
+
+    private async Task ReorderChildrenAsync(int parentTaskId, TodoTaskViewModel dragged, TodoTaskViewModel target)
+    {
+        var parent = _sourceViewModels.FirstOrDefault(p => p.TaskID == parentTaskId);
+        if (parent is null)
+        {
+            RaiseToast("That task is not part of the current list, so it cannot be reordered.");
+            return;
+        }
+
+        var siblings = parent.Steps;
+        var fromIndex = siblings.IndexOf(dragged);
+        var targetIndex = siblings.IndexOf(target);
+
+        if (fromIndex < 0 || targetIndex < 0)
+        {
+            RaiseToast("The list changed while you were dragging. Try again.");
+            return;
+        }
+
+        if (fromIndex == targetIndex)
+        {
+            RaiseToast("That task is already in that position.");
+            return;
+        }
+
+        var snapshot = siblings.ToList();
+
+        try
+        {
+            var movingDown = targetIndex > fromIndex;
+
+            siblings.RemoveAt(fromIndex);
+            siblings.Insert(siblings.IndexOf(target) + (movingDown ? 1 : 0), dragged);
+
+            for (var i = 0; i < siblings.Count; i++)
+                siblings[i].SetRanking(i + 1);
+
+            await TaskRepository.ReorderTasksAsync(
+                CurrentUserId, _selectedGroup?.GroupID, parentTaskId,
+                siblings.Select(t => t.TaskID).ToList());
+        }
+        catch
+        {
+            parent.SetChildren(snapshot);
+            for (var i = 0; i < snapshot.Count; i++)
+                snapshot[i].SetRanking(i + 1);
+            RebuildView();
+            throw;
+        }
+
+        RebuildView();
         RaiseToast("Order updated");
     }
 

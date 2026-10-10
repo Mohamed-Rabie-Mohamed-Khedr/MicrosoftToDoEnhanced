@@ -319,7 +319,7 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <views:TaskDetailPanel DataContext="{Binding SelectedTask}"/>
+            <views:TaskDetailPanel DataContext="{Binding DetailTask}"/>
         </Border>
 
         <Border x:Name="Toast" Grid.ColumnSpan="4" HorizontalAlignment="Center" VerticalAlignment="Bottom"
