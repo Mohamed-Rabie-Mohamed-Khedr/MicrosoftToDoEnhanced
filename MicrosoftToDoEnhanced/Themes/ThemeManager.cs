@@ -15,7 +15,7 @@ public static class ThemeManager
     private const string DarkSource = "Themes/DarkTheme.xaml";
     private const string DefaultAccentHex = "#0078D4";
 
-    public static string CurrentAccentHex { get; private set; } = DefaultAccentHex;
+    private static string CurrentAccentHex { get; set; } = DefaultAccentHex;
 
     public static void ApplyTheme(AppTheme theme)
     {
@@ -67,16 +67,10 @@ public static class ThemeManager
 
     private static bool TryParseColor(string hex, out Color color)
     {
-        try
+        if (hex.Length is 7 or 9 && hex[0] == '#' && hex.Skip(1).All(Uri.IsHexDigit))
         {
-            if (ColorConverter.ConvertFromString(hex) is Color parsed)
-            {
-                color = parsed;
-                return true;
-            }
-        }
-        catch
-        {
+            color = (Color)ColorConverter.ConvertFromString(hex)!;
+            return true;
         }
 
         color = default;

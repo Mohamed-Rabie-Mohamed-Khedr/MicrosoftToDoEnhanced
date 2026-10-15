@@ -106,7 +106,7 @@ public sealed class LoginViewModel : ViewModelBase
         }
     }
 
-    private void OnCommandError(Exception exception)
+    private void OnCommandError(Exception _)
     {
         LoginError = "Something went wrong. Please try again.";
     }
@@ -428,15 +428,16 @@ public static class RememberedLoginStore
         File.WriteAllBytes(FilePath, Protect(Serialize(userName, password)));
     }
 
-    public static void Clear()
+    public static bool Clear()
     {
         try
         {
-            if (File.Exists(FilePath))
-                File.Delete(FilePath);
+            File.Delete(FilePath);
+            return true;
         }
         catch (Exception)
         {
+            return false;
         }
     }
 

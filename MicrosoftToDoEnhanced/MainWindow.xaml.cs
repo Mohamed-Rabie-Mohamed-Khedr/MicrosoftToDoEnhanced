@@ -2,89 +2,94 @@
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using MicrosoftToDoEnhanced.Themes;
 using MicrosoftToDoEnhanced.ViewModels;
 
-namespace MicrosoftToDoEnhanced
+namespace MicrosoftToDoEnhanced;
+
+public partial class MainWindow : Window
 {
-    public partial class MainWindow : Window
+    private Storyboard? _toastShow;
+    private Storyboard? _toastHide;
+    private DispatcherTimer? _toastHideTimer;
+
+    public MainWindow(User user)
     {
-        private Storyboard? _toastShow;
-        private Storyboard? _toastHide;
+        InitializeComponent();
 
-        public MainWindow(User user)
+        var viewModel = new MainViewModel(user, this);
+        viewModel.ToastRequested += (_, message) => ShowToast(message);
+        viewModel.SignOutRequested += (_, _) =>
         {
-            InitializeComponent();
+            Views.RememberedLoginStore.Clear();
+            DataContext = null;
+            var login = new Views.LoginView();
+            login.Show();
+            Close();
+        };
+        DataContext = viewModel;
 
-            var viewModel = new MainViewModel(user, this);
-            viewModel.ToastRequested += (_, message) => ShowToast(message);
-            viewModel.SignOutRequested += (_, _) =>
-            {
-                Views.RememberedLoginStore.Clear();
-                DataContext = null;
-                var login = new Views.LoginView();
-                login.Show();
-                Close();
-            };
-            DataContext = viewModel;
+        _ = viewModel.InitializeAsync();
+    }
 
-            _ = viewModel.InitializeAsync();
-        }
+    private void OnThemeToggled(object sender, RoutedEventArgs e) =>
+        ThemeManager.ApplyTheme(((ToggleButton)sender).IsChecked == true ? AppTheme.Dark : AppTheme.Light);
 
-        private void OnThemeToggled(object sender, RoutedEventArgs e)
+    private void OnTaskReorderRequested(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (DataContext is MainViewModel viewModel
+            && e.OldValue is TodoTaskViewModel dragged
+            && e.NewValue is TodoTaskViewModel target)
         {
-            if (sender is ToggleButton toggle)
-                ThemeManager.ApplyTheme(toggle.IsChecked == true ? AppTheme.Dark : AppTheme.Light);
-        }
-
-        private void OnTaskReorderRequested(object sender, RoutedPropertyChangedEventArgs<object> e)
-        {
-            if (DataContext is not MainViewModel viewModel)
-                return;
-            if (e.OldValue is not TodoTaskViewModel dragged || e.NewValue is not TodoTaskViewModel target)
-                return;
-
             viewModel.ReorderTasksCommand.Execute(new ReorderPayload(dragged, target));
         }
+    }
 
-        public void ShowToast(string message)
+    private void ShowToast(string message)
+    {
+        EnsureToastStoryboards();
+
+        _toastShow!.Stop();
+        _toastHide!.Stop();
+        _toastHideTimer!.Stop();
+
+        ToastText.Text = message;
+        Toast.IsHitTestVisible = true;
+
+        _toastShow.Begin();
+        _toastHideTimer.Start();
+    }
+
+    private void EnsureToastStoryboards()
+    {
+        if (_toastShow is not null && _toastHide is not null)
+            return;
+
+        var show = new Storyboard();
+        show.Children.Add(new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
+        show.Children.Add(new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
+        Storyboard.SetTarget(show.Children[0], Toast);
+        Storyboard.SetTargetProperty(show.Children[0], new PropertyPath(OpacityProperty));
+        Storyboard.SetTarget(show.Children[1], ToastTransform);
+        Storyboard.SetTargetProperty(show.Children[1], new PropertyPath(TranslateTransform.YProperty));
+
+        var hide = new Storyboard();
+        hide.Children.Add(new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220)));
+        hide.Children.Add(new DoubleAnimation(0, 16, TimeSpan.FromMilliseconds(220)));
+        Storyboard.SetTarget(hide.Children[0], Toast);
+        Storyboard.SetTargetProperty(hide.Children[0], new PropertyPath(OpacityProperty));
+        Storyboard.SetTarget(hide.Children[1], ToastTransform);
+        Storyboard.SetTargetProperty(hide.Children[1], new PropertyPath(TranslateTransform.YProperty));
+        hide.Completed += (_, _) => Toast.IsHitTestVisible = false;
+
+        _toastShow = show;
+        _toastHide = hide;
+        _toastHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2400) };
+        _toastHideTimer.Tick += (_, _) =>
         {
-            EnsureToastStoryboards();
-
-            _toastShow!.Stop();
-            _toastHide!.Stop();
-
-            ToastText.Text = message;
-            Toast.IsHitTestVisible = true;
-
-            _toastShow.Begin();
+            _toastHideTimer.Stop();
             _toastHide.Begin();
-        }
-
-        private void EnsureToastStoryboards()
-        {
-            if (_toastShow is not null && _toastHide is not null)
-                return;
-
-            var show = new Storyboard();
-            show.Children.Add(new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
-            show.Children.Add(new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
-            Storyboard.SetTarget(show.Children[0], Toast);
-            Storyboard.SetTargetProperty(show.Children[0], new PropertyPath(OpacityProperty));
-            Storyboard.SetTarget(show.Children[1], ToastTransform);
-            Storyboard.SetTargetProperty(show.Children[1], new PropertyPath(TranslateTransform.YProperty));
-
-            var hide = new Storyboard { BeginTime = TimeSpan.FromMilliseconds(2400) };
-            hide.Children.Add(new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220)));
-            hide.Children.Add(new DoubleAnimation(0, 16, TimeSpan.FromMilliseconds(220)));
-            Storyboard.SetTarget(hide.Children[0], Toast);
-            Storyboard.SetTargetProperty(hide.Children[0], new PropertyPath(OpacityProperty));
-            Storyboard.SetTarget(hide.Children[1], ToastTransform);
-            Storyboard.SetTargetProperty(hide.Children[1], new PropertyPath(TranslateTransform.YProperty));
-            hide.Completed += (_, _) => Toast.IsHitTestVisible = false;
-
-            _toastShow = show;
-            _toastHide = hide;
-        }
+        };
     }
 }

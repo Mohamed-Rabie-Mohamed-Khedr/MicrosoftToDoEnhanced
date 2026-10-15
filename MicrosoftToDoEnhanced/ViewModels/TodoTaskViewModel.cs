@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Windows;
 using System.Windows.Input;
 using Core.Repositories;
 using Microsoft.Win32;
@@ -74,8 +73,6 @@ public class TodoTaskViewModel : ViewModelBase
         set => SetProperty(ref _isExpanded, value);
     }
 
-    public Thickness RowPadding => new(IsStep ? 36 : 12, 10, 12, 10);
-
     internal void SetRanking(int ranking) => _model.Ranking = ranking;
 
     internal void SetChildren(IEnumerable<TodoTaskViewModel> children)
@@ -113,11 +110,7 @@ public class TodoTaskViewModel : ViewModelBase
 
     public string Title => TaskName;
 
-    public string Color
-    {
-        get => _model.Color;
-        set => _model.Color = value;
-    }
+    public string Color => _model.Color;
 
     public bool IsCompleted
     {
@@ -165,19 +158,37 @@ public class TodoTaskViewModel : ViewModelBase
     public bool IsLow
     {
         get => LevelOfImportanceId == (int)TaskImportance.Low;
-        set { if (value) LevelOfImportanceId = (int)TaskImportance.Low; }
+        set
+        {
+            if (value)
+                LevelOfImportanceId = (int)TaskImportance.Low;
+            else if (IsLow)
+                OnPropertyChanged();
+        }
     }
 
     public bool IsMedium
     {
         get => LevelOfImportanceId == (int)TaskImportance.Medium;
-        set { if (value) LevelOfImportanceId = (int)TaskImportance.Medium; }
+        set
+        {
+            if (value)
+                LevelOfImportanceId = (int)TaskImportance.Medium;
+            else if (IsMedium)
+                OnPropertyChanged();
+        }
     }
 
     public bool IsHigh
     {
         get => LevelOfImportanceId == (int)TaskImportance.High;
-        set { if (value) LevelOfImportanceId = (int)TaskImportance.High; }
+        set
+        {
+            if (value)
+                LevelOfImportanceId = (int)TaskImportance.High;
+            else if (IsHigh)
+                OnPropertyChanged();
+        }
     }
 
     public ObservableCollection<TodoTaskViewModel> Steps { get; } = new();
@@ -206,6 +217,8 @@ public class TodoTaskViewModel : ViewModelBase
             if (!SetProperty(ref _dueDate, value))
                 return;
 
+            OnPropertyChanged(nameof(DueDateDisplay));
+
             if (value is null && SelectedRecurrence?.Type.RepetitionTypeID > 1)
                 SelectedRecurrence = _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == 1);
         }
@@ -214,7 +227,23 @@ public class TodoTaskViewModel : ViewModelBase
     public DateTime? EndDate
     {
         get => _endDate;
-        set => SetProperty(ref _endDate, value);
+        set
+        {
+            if (SetProperty(ref _endDate, value))
+                OnPropertyChanged(nameof(DueDateDisplay));
+        }
+    }
+
+    public string? DueDateDisplay
+    {
+        get
+        {
+            if (_dueDate is DateTime start)
+                return _endDate is DateTime end && end.Date != start.Date
+                    ? $"{start:ddd, MMM d} – {end:ddd, MMM d}"
+                    : $"{start:ddd, MMM d}";
+            return _endDate is DateTime onlyEnd ? $"{onlyEnd:ddd, MMM d}" : null;
+        }
     }
 
     public List<RecurrenceOption> RecurrenceOptions => _recurrenceOptions;
@@ -308,11 +337,7 @@ public class TodoTaskViewModel : ViewModelBase
         _planned = planned;
         DueDate = planned.PlannedStartDate;
         EndDate = planned.PlannedEndDate;
-        if (planned.RepetitionTypeID is int repetitionTypeId)
-        {
-            SelectedRecurrence =
-                _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == repetitionTypeId);
-        }
+        ApplyRecurrence(planned.RepetitionTypeID);
     }
 
     public void ApplyListExtras(TaskListExtras extras)
@@ -327,11 +352,7 @@ public class TodoTaskViewModel : ViewModelBase
             DueDate = dueDate;
         EndDate = extras.DueEndDate;
 
-        if (extras.RepetitionTypeID is int repetitionTypeId)
-        {
-            SelectedRecurrence =
-                _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == repetitionTypeId);
-        }
+        ApplyRecurrence(extras.RepetitionTypeID);
 
         if (extras.AssignedToUserID is int assignedUserId && extras.AssignedToName is not null)
         {
@@ -345,10 +366,16 @@ public class TodoTaskViewModel : ViewModelBase
         }
     }
 
+    private void ApplyRecurrence(int? repetitionTypeId)
+    {
+        if (repetitionTypeId is int id)
+            SelectedRecurrence = _recurrenceOptions.FirstOrDefault(o => o.Type.RepetitionTypeID == id);
+    }
+
     internal static async Task<TaskStatusResult?> ToggleStatusAsync(
         TodoTaskViewModel task, int requested, int actingUserId, Action<string> toast, string forcedMessage)
     {
-        var priorIsCompleted = !task.IsCompleted;
+        var priorIsCompleted = task.IsCompleted;
 
         TaskStatusResult result;
         try
@@ -464,15 +491,32 @@ public class TodoTaskViewModel : ViewModelBase
         if (step is null)
             return;
 
-        var requested = step.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete;
+        var requested = step.IsCompleted ? (int)TaskState.Incomplete : (int)TaskState.Completed;
+        var priorDueDate = step.DueDate;
+
         var result = await ToggleStatusAsync(
             step, requested, _owner.CurrentUserId, _owner.RaiseToast, "The step could not be changed as requested.");
         if (result is null)
             return;
 
+        DateTime? advancedTo = requested == (int)TaskState.Completed
+            && result.PlannedStartDate is DateTime nextOccurrence
+            && nextOccurrence != priorDueDate
+            ? nextOccurrence
+            : null;
+
+        if (result.PlannedStartDate is DateTime nextStart)
+            step.DueDate = nextStart;
+        step.EndDate = result.PlannedEndDate;
+
         UpdateStepsSummary();
-        _owner.RaiseToast(step.IsCompleted ? "Step completed" : "Step marked incomplete");
+        _owner.RebuildView();
         await _owner.RefreshCountsAsync();
+
+        if (advancedTo is DateTime next)
+            _owner.RaiseToast($"Next occurrence: {next:d}");
+        else
+            _owner.RaiseToast(step.IsCompleted ? "Step completed" : "Step marked incomplete");
     }
 
     private async Task RemoveStepAsync(TodoTaskViewModel? step)

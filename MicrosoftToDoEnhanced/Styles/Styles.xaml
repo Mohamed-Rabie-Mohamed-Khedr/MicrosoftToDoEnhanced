@@ -135,9 +135,35 @@
         </Setter>
     </Style>
 
-    <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
-        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+    <Style x:Key="FluentGroupRowButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource PressedBackgroundBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
+
+    <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>    </Style>
 
     <Style x:Key="LinkButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
@@ -258,7 +284,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="32"/>
                             </Grid.ColumnDefinitions>
-                            <Path x:Name="Chevron" Grid.Column="1" Width="8" Height="5" VerticalAlignment="Center" HorizontalAlignment="Center"
+                            <Path Grid.Column="1" Width="8" Height="5" VerticalAlignment="Center" HorizontalAlignment="Center"
                                   Data="M0,0 L4,5 L8,0 Z" Fill="{DynamicResource TextSecondaryBrush}" Stretch="None"/>
                         </Grid>
                     </Border>

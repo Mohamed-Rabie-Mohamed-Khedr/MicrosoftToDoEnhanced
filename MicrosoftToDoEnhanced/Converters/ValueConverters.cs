@@ -9,25 +9,20 @@ public class HexToBrushConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        if (value is string hex && !string.IsNullOrWhiteSpace(hex))
+        if (value is string hex && IsHexColor(hex))
         {
-            try
-            {
-                var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-                brush.Freeze();
-                return brush;
-            }
-            catch {  }
+            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!);
+            brush.Freeze();
+            return brush;
         }
         return Application.Current.TryFindResource("TextTertiaryBrush") ?? Brushes.Gray;
     }
 
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        if (value is SolidColorBrush brush)
-            return $"#{brush.Color.R:X2}{brush.Color.G:X2}{brush.Color.B:X2}";
-        return Binding.DoNothing;
-    }
+    private static bool IsHexColor(string hex) =>
+        hex.Length is 7 or 9 && hex[0] == '#' && hex.Skip(1).All(Uri.IsHexDigit);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        Binding.DoNothing;
 }
 
 public class InverseBoolConverter : IValueConverter
@@ -45,7 +40,7 @@ public class BoolToVisibilityConverter : IValueConverter
         value is true ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is Visibility v ? v == Visibility.Visible : Binding.DoNothing;
+        Binding.DoNothing;
 }
 
 public class InverseBoolToVisibilityConverter : IValueConverter
@@ -54,7 +49,7 @@ public class InverseBoolToVisibilityConverter : IValueConverter
         value is true ? Visibility.Collapsed : Visibility.Visible;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is Visibility v ? v != Visibility.Visible : Binding.DoNothing;
+        Binding.DoNothing;
 }
 
 public class NullToVisibilityConverter : IValueConverter

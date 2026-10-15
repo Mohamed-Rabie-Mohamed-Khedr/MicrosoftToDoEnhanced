@@ -51,7 +51,7 @@ public class MainViewModel : ViewModelBase
         Tasks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasTasks));
 
         AddTaskCommand = new AsyncRelayCommand(AddTaskAsync, onError: OnAsyncCommandError);
-        OpenGroupSettingsCommand = new AsyncRelayCommand<Group>(OpenGroupSettingsAsync, onError: OnAsyncCommandError);
+        OpenGroupChatCommand = new AsyncRelayCommand<Group>(OpenGroupChatAsync, onError: OnAsyncCommandError);
         CreateGroupCommand = new AsyncRelayCommand(CreateGroupAsync, onError: OnAsyncCommandError);
         SignOutCommand = new RelayCommand(() => SignOutRequested?.Invoke(this, EventArgs.Empty));
         CloseDetailsCommand = new RelayCommand(() => SelectedTask = null);
@@ -70,7 +70,7 @@ public class MainViewModel : ViewModelBase
     public ObservableCollection<TodoTaskViewModel> Tasks { get; } = new();
 
     public ICommand AddTaskCommand { get; }
-    public ICommand OpenGroupSettingsCommand { get; }
+    public ICommand OpenGroupChatCommand { get; }
     public ICommand CreateGroupCommand { get; }
     public ICommand SignOutCommand { get; }
     public ICommand CloseDetailsCommand { get; }
@@ -237,6 +237,7 @@ public class MainViewModel : ViewModelBase
                 return;
 
             _searchDebounceCts?.Cancel();
+            _searchDebounceCts?.Dispose();
             var cts = new CancellationTokenSource();
             _searchDebounceCts = cts;
             RebuildViewDebouncedAsync(cts).SafeFireAndForget(OnAsyncCommandError);
@@ -331,7 +332,7 @@ public class MainViewModel : ViewModelBase
         RebuildView();
     }
 
-    public bool CanReorderTasks =>
+    private bool CanReorderTasks =>
         _selectedGroup is not null
         || _selectedSmartView?.Kind is SmartViewKind.All or null;
 
@@ -585,7 +586,7 @@ public class MainViewModel : ViewModelBase
         if (task is null)
             return;
 
-        var requested = task.IsCompleted ? (int)TaskState.Completed : (int)TaskState.Incomplete;
+        var requested = task.IsCompleted ? (int)TaskState.Incomplete : (int)TaskState.Completed;
         var priorDueDate = task.DueDate;
 
         var result = await TodoTaskViewModel.ToggleStatusAsync(
@@ -647,16 +648,27 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        if (dragged.TaskParentID is int parentTaskId)
-            await ReorderChildrenAsync(parentTaskId, dragged, target);
-        else
-            await ReorderParentsAsync(dragged, target);
+        await ReorderItemsAsync(dragged.TaskParentID, dragged, target);
     }
 
-    private async Task ReorderParentsAsync(TodoTaskViewModel dragged, TodoTaskViewModel target)
+    private async Task ReorderItemsAsync(int? parentTaskId, TodoTaskViewModel dragged, TodoTaskViewModel target)
     {
-        var fromIndex = _sourceViewModels.IndexOf(dragged);
-        var targetIndex = _sourceViewModels.IndexOf(target);
+        TodoTaskViewModel? parent = null;
+        IList<TodoTaskViewModel> items = _sourceViewModels;
+
+        if (parentTaskId is int parentId)
+        {
+            parent = _sourceViewModels.FirstOrDefault(p => p.TaskID == parentId);
+            if (parent is null)
+            {
+                RaiseToast("That task is not part of the current list, so it cannot be reordered.");
+                return;
+            }
+            items = parent.Steps;
+        }
+
+        var fromIndex = items.IndexOf(dragged);
+        var targetIndex = items.IndexOf(target);
 
         if (fromIndex < 0 || targetIndex < 0)
         {
@@ -670,89 +682,44 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        var sourceTasksSnapshot = _sourceTasks.ToList();
-        var sourceViewModelsSnapshot = _sourceViewModels.ToList();
-
-        try
-        {
-            var movingDown = targetIndex > fromIndex;
-            var draggedTask = _sourceTasks[fromIndex];
-
-            _sourceTasks.RemoveAt(fromIndex);
-            _sourceViewModels.RemoveAt(fromIndex);
-
-            var destination = _sourceViewModels.IndexOf(target) + (movingDown ? 1 : 0);
-
-            _sourceTasks.Insert(destination, draggedTask);
-            _sourceViewModels.Insert(destination, dragged);
-
-            for (var i = 0; i < _sourceTasks.Count; i++)
-                _sourceTasks[i].Ranking = i + 1;
-
-            await TaskRepository.ReorderTasksAsync(
-                CurrentUserId, _selectedGroup?.GroupID, null,
-                _sourceTasks.Select(t => t.TaskID).ToList());
-        }
-        catch
-        {
-            _sourceTasks = sourceTasksSnapshot;
-            _sourceViewModels = sourceViewModelsSnapshot;
-            for (var i = 0; i < _sourceTasks.Count; i++)
-                _sourceTasks[i].Ranking = i + 1;
-            RebuildView();
-            throw;
-        }
-
-        RebuildView();
-        RaiseToast("Order updated");
-    }
-
-    private async Task ReorderChildrenAsync(int parentTaskId, TodoTaskViewModel dragged, TodoTaskViewModel target)
-    {
-        var parent = _sourceViewModels.FirstOrDefault(p => p.TaskID == parentTaskId);
-        if (parent is null)
-        {
-            RaiseToast("That task is not part of the current list, so it cannot be reordered.");
-            return;
-        }
-
-        var siblings = parent.Steps;
-        var fromIndex = siblings.IndexOf(dragged);
-        var targetIndex = siblings.IndexOf(target);
-
-        if (fromIndex < 0 || targetIndex < 0)
-        {
-            RaiseToast("The list changed while you were dragging. Try again.");
-            return;
-        }
-
-        if (fromIndex == targetIndex)
-        {
-            RaiseToast("That task is already in that position.");
-            return;
-        }
-
-        var snapshot = siblings.ToList();
+        var snapshot = items.ToList();
+        var taskSnapshot = parent is null ? _sourceTasks.ToList() : null;
 
         try
         {
             var movingDown = targetIndex > fromIndex;
 
-            siblings.RemoveAt(fromIndex);
-            siblings.Insert(siblings.IndexOf(target) + (movingDown ? 1 : 0), dragged);
+            items.RemoveAt(fromIndex);
+            items.Insert(items.IndexOf(target) + (movingDown ? 1 : 0), dragged);
 
-            for (var i = 0; i < siblings.Count; i++)
-                siblings[i].SetRanking(i + 1);
+            for (var i = 0; i < items.Count; i++)
+                items[i].SetRanking(i + 1);
+
+            if (parent is null)
+            {
+                var tasksById = taskSnapshot!.ToDictionary(t => t.TaskID);
+                _sourceTasks = items.Select(t => tasksById[t.TaskID]).ToList();
+            }
 
             await TaskRepository.ReorderTasksAsync(
                 CurrentUserId, _selectedGroup?.GroupID, parentTaskId,
-                siblings.Select(t => t.TaskID).ToList());
+                items.Select(t => t.TaskID).ToList());
         }
         catch
         {
-            parent.SetChildren(snapshot);
+            if (parent is null)
+            {
+                _sourceViewModels = snapshot;
+                _sourceTasks = taskSnapshot!;
+            }
+            else
+            {
+                parent.SetChildren(snapshot);
+            }
+
             for (var i = 0; i < snapshot.Count; i++)
                 snapshot[i].SetRanking(i + 1);
+
             RebuildView();
             throw;
         }
@@ -761,19 +728,30 @@ public class MainViewModel : ViewModelBase
         RaiseToast("Order updated");
     }
 
-    private async Task OpenGroupSettingsAsync(Group? group)
+    private async Task OpenGroupChatAsync(Group? group)
     {
         if (group is null)
             return;
 
-        var dialogGroupId = await GroupDialogService.ShowAsync(_window, this, group);
+        var editTasks = await GroupDialogService.ShowChatAsync(_window, this, group);
 
-        await SelectGroupOrResetAsync(dialogGroupId ?? _selectedGroup?.GroupID);
+        if (editTasks)
+        {
+            await SelectGroupOrResetAsync(group.GroupID);
+            return;
+        }
+
+        await RefreshGroupsAsync();
+        if (_selectedGroup is not null && Groups.All(g => g.GroupID != _selectedGroup.GroupID))
+        {
+            SelectedGroup = null;
+            await RefreshSourceAndViewAsync();
+        }
     }
 
     private async Task CreateGroupAsync()
     {
-        var createdGroupId = await GroupDialogService.ShowAsync(_window, this);
+        var createdGroupId = GroupDialogService.ShowCreate(_window, this);
 
         await SelectGroupOrResetAsync(createdGroupId);
     }

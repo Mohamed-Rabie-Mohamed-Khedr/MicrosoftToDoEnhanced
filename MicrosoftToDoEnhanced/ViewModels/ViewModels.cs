@@ -42,25 +42,13 @@ public abstract class ViewModelBase : INotifyPropertyChanged
             : exception.Message;
 }
 
-public class RelayCommand : RelayCommand<object?>
+public class RelayCommand(Action execute, Func<bool>? canExecute = null)
+    : RelayCommand<object?>(_ => execute(), canExecute is null ? null : _ => canExecute())
 {
-    public RelayCommand(Action execute, Func<bool>? canExecute = null)
-        : base(_ => execute(), canExecute is null ? null : _ => canExecute())
-    {
-    }
 }
 
-public class RelayCommand<T> : ICommand
+public class RelayCommand<T>(Action<T?> execute, Func<T?, bool>? canExecute = null) : ICommand
 {
-    private readonly Action<T?> _execute;
-    private readonly Func<T?, bool>? _canExecute;
-
-    public RelayCommand(Action<T?> execute, Func<T?, bool>? canExecute = null)
-    {
-        _execute = execute;
-        _canExecute = canExecute;
-    }
-
     public event EventHandler? CanExecuteChanged
     {
         add => CommandManager.RequerySuggested += value;
@@ -68,33 +56,20 @@ public class RelayCommand<T> : ICommand
     }
 
     public bool CanExecute(object? parameter) =>
-        _canExecute?.Invoke(parameter is T value ? value : default) ?? true;
+        canExecute?.Invoke(parameter is T value ? value : default) ?? true;
 
     public void Execute(object? parameter) =>
-        _execute(parameter is T value ? value : default);
+        execute(parameter is T value ? value : default);
 }
 
-public class AsyncRelayCommand : AsyncRelayCommand<object?>
+public class AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null, Action<Exception>? onError = null)
+    : AsyncRelayCommand<object?>(_ => execute(), canExecute is null ? null : _ => canExecute(), onError)
 {
-    public AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute = null, Action<Exception>? onError = null)
-        : base(_ => execute(), canExecute is null ? null : _ => canExecute(), onError)
-    {
-    }
 }
 
-public class AsyncRelayCommand<T> : ICommand
+public class AsyncRelayCommand<T>(Func<T?, Task> execute, Func<T?, bool>? canExecute = null, Action<Exception>? onError = null) : ICommand
 {
-    private readonly Func<T?, Task> _execute;
-    private readonly Func<T?, bool>? _canExecute;
-    private readonly Action<Exception>? _onError;
     private bool _isRunning;
-
-    public AsyncRelayCommand(Func<T?, Task> execute, Func<T?, bool>? canExecute = null, Action<Exception>? onError = null)
-    {
-        _execute = execute;
-        _canExecute = canExecute;
-        _onError = onError;
-    }
 
     public event EventHandler? CanExecuteChanged
     {
@@ -103,7 +78,7 @@ public class AsyncRelayCommand<T> : ICommand
     }
 
     public bool CanExecute(object? parameter) =>
-        !_isRunning && (_canExecute?.Invoke(parameter is T value ? value : default) ?? true);
+        !_isRunning && (canExecute?.Invoke(parameter is T value ? value : default) ?? true);
 
     public async void Execute(object? parameter)
     {
@@ -114,11 +89,11 @@ public class AsyncRelayCommand<T> : ICommand
         RaiseCanExecuteChanged();
         try
         {
-            await _execute(parameter is T value ? value : default);
+            await execute(parameter is T value ? value : default);
         }
         catch (Exception exception)
         {
-            _onError?.Invoke(exception);
+            onError?.Invoke(exception);
         }
         finally
         {
@@ -139,20 +114,13 @@ public enum SmartViewKind
     Planned
 }
 
-public class SmartViewItem : ViewModelBase
+public class SmartViewItem(string name, string color, SmartViewKind kind) : ViewModelBase
 {
     private int _count;
 
-    public SmartViewItem(string name, string color, SmartViewKind kind)
-    {
-        Name = name;
-        Color = color;
-        Kind = kind;
-    }
-
-    public string Name { get; }
-    public string Color { get; }
-    public SmartViewKind Kind { get; }
+    public string Name { get; } = name;
+    public string Color { get; } = color;
+    public SmartViewKind Kind { get; } = kind;
 
     public int Count
     {
@@ -161,25 +129,20 @@ public class SmartViewItem : ViewModelBase
     }
 }
 
-public class RecurrenceOption
+public class RecurrenceOption(RepetitionType type)
 {
-    public RecurrenceOption(RepetitionType type) => Type = type;
-
-    public RepetitionType Type { get; }
+    public RepetitionType Type { get; } = type;
 
     public string Name => Type.RepetitionName;
 
     public override string ToString() => Name;
 }
 
-public class PostItemViewModel
+public class PostItemViewModel(PostFeedItem feedItem)
 {
-    private readonly PostFeedItem _feedItem;
-
-    public PostItemViewModel(PostFeedItem feedItem) => _feedItem = feedItem;
-
-    public string AuthorName => _feedItem.ShowName;
-    public string AuthorColor => _feedItem.UserColor;
-    public DateTime PostDate => _feedItem.PostDate;
-    public string PostContent => _feedItem.PostContent;
+    public int PostID => feedItem.PostID;
+    public string AuthorName => feedItem.ShowName;
+    public string AuthorColor => feedItem.UserColor;
+    public DateTime PostDate => feedItem.PostDate;
+    public string PostContent => feedItem.PostContent;
 }

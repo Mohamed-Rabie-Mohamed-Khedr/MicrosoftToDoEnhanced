@@ -56,21 +56,9 @@ public static class TaskRepository
         int? taskParentId, int taskStatusId, int userId, int? groupId,
         string taskName, int importanceLevelId, string? description, string color)
     {
-        var taskId = await SqlHelper.ExecuteProcReturnAsync("AddTask",
-            new SqlParameter("@TaskParentID", SqlDbType.Int) { Value = taskParentId ?? (object)DBNull.Value },
-            new SqlParameter("@TaskStatusID", SqlDbType.Int) { Value = taskStatusId },
-            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId ?? (object)DBNull.Value },
-            new SqlParameter("@TaskName", SqlDbType.NVarChar, 100) { Value = taskName },
-            new SqlParameter("@ImportanceLevelID", SqlDbType.Int) { Value = importanceLevelId },
-            new SqlParameter("@Description", SqlDbType.NVarChar, -1)
-            {
-                Value = description is null ? DBNull.Value : description
-            },
-            new SqlParameter("@Color", SqlDbType.VarChar, 16)
-            {
-                Value = string.IsNullOrWhiteSpace(color) ? "#FFFFFF" : color
-            });
+        var taskId = await SaveTaskAsync(
+            null, taskParentId, taskStatusId, userId, groupId,
+            taskName, importanceLevelId, description, color, null, null, 1, null);
 
         return taskId ?? throw new InvalidOperationException("The task could not be added.");
     }
@@ -143,7 +131,7 @@ public static class TaskRepository
 
     public static async Task<List<TodoTask>> GetParentTasksAsync(int userId, bool byImportance)
     {
-        var rows = await SqlHelper.QueryAsync("GetTaskParents", true,
+        var rows = await SqlHelper.QueryAsync("GetParentTasks", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
             new SqlParameter("@ByImportance", SqlDbType.Bit) { Value = byImportance });
         return rows.Select(r => new TodoTask(r)).ToList();
@@ -151,9 +139,9 @@ public static class TaskRepository
 
     public static async Task<List<TodoTask>> GetGroupParentTasksAsync(int groupId, int actingUserId)
     {
-        var rows = await SqlHelper.QueryAsync("GetGroupParentTasks", true,
-            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId },
-            new SqlParameter("@ActingUserID", SqlDbType.Int) { Value = actingUserId });
+        var rows = await SqlHelper.QueryAsync("GetParentTasks", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = actingUserId },
+            new SqlParameter("@GroupID", SqlDbType.Int) { Value = groupId });
         return rows.Select(r => new TodoTask(r)).ToList();
     }
 
@@ -399,8 +387,8 @@ public static class PlannedTaskRepository
         return plannedId ?? throw new InvalidOperationException("The plan could not be saved.");
     }
 
-    public static Task AutoUpdateAsync() =>
-        SqlHelper.ExecuteAsync("AutoUpdatePlanneds", true);
+    public static Task<int?> AutoUpdateAsync() =>
+        SqlHelper.ExecuteProcReturnAsync("AutoUpdatePlanneds");
 
     public static async Task<PlannedTask?> GetPlannedAsync(int taskId)
     {
@@ -540,7 +528,7 @@ public static class PostRepository
         return rows.Select(r => new PostFeedItem(
             Convert.ToInt32(r["PostID"]),
             Convert.ToString(r["PostContent"]) ?? string.Empty,
-            Convert.ToDateTime(r["PostDate"]),
+            DateTime.SpecifyKind(Convert.ToDateTime(r["CreatedAt"]), DateTimeKind.Utc).ToLocalTime(),
             Convert.ToString(r["ShowName"]) ?? string.Empty,
             Convert.ToString(r["UserColor"]) ?? string.Empty)).ToList();
     }
@@ -566,24 +554,12 @@ public static class UserRepository
         return result is null or DBNull ? null : Convert.ToString(result);
     }
 
-    private static async Task<User?> GetUserByUserNameAsync(string userName)
+    public static async Task<User?> GetUserByUserNameAsync(string userName)
     {
         var rows = await SqlHelper.QueryAsync(
             $"SELECT {UserColumns} FROM Users WHERE UserName = @UserName",
             false,
             new SqlParameter("@UserName", SqlDbType.NVarChar, 100) { Value = userName });
-        return rows.Count == 0 ? null : new User(rows[0]);
-    }
-
-    public static async Task<User?> GetUserByEmailAsync(string email)
-    {
-        var rows = await SqlHelper.QueryAsync(
-            $"SELECT {UserColumns} FROM Users WHERE UserEmail = @UserEmail",
-            false,
-            new SqlParameter("@UserEmail", SqlDbType.VarChar, 255)
-            {
-                Value = email.Trim().ToLowerInvariant()
-            });
         return rows.Count == 0 ? null : new User(rows[0]);
     }
 

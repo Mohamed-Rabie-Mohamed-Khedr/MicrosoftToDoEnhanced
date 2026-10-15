@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 
 namespace General.Models;
 
@@ -44,13 +44,13 @@ public class Group
     }
 }
 
-public class TodoTaskStatus
+public sealed record TodoTaskStatus
 {
     public int TaskStatusID { get; set; }
     public string StatusName { get; set; } = string.Empty;
 }
 
-public class LevelOfImportance
+public sealed record LevelOfImportance
 {
     public int LevelOfImportanceID { get; set; }
     public string LevelName { get; set; } = string.Empty;
@@ -98,14 +98,14 @@ public class TodoTask
     }
 }
 
-public class Attachment
+public sealed record Attachment
 {
     public int AttachmentID { get; set; }
     public string FileName { get; set; } = string.Empty;
     public int FileSizeKB { get; set; }
 }
 
-public class RepetitionType
+public sealed record RepetitionType
 {
     public int RepetitionTypeID { get; set; }
     public string RepetitionName { get; set; } = string.Empty;

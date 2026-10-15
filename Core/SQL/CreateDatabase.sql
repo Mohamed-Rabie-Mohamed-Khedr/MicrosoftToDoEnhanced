@@ -426,55 +426,6 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.AddTask
-    @TaskParentID        INT = NULL,
-    @TaskStatusID        INT = 2,
-    @UserID              INT,
-    @GroupID             INT = NULL,
-    @TaskName            NVARCHAR(100),
-    @ImportanceLevelID   INT = 2,
-    @Description         NVARCHAR(MAX) = NULL,
-    @Color               VARCHAR(16) = '#FFFFFF'
-AS
-BEGIN
-    BEGIN TRY
-        BEGIN TRANSACTION;
-        IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@UserID, @GroupID) = 0
-            THROW 50001, N'AddTask: You must be a member of the group to add tasks.', 1;
-        IF @TaskParentID IS NOT NULL
-        BEGIN
-            DECLARE @ParentOwnerID INT, @ParentGroupID INT;
-            SELECT @ParentOwnerID = UserID, @ParentGroupID = GroupID
-            FROM dbo.Tasks WHERE TaskID = @TaskParentID;
-            IF @ParentOwnerID IS NULL
-                THROW 50002, N'AddTask: Parent task was not found.', 1;
-            IF EXISTS (SELECT 1 FROM dbo.Tasks WHERE TaskID = @TaskParentID AND TaskParentID IS NOT NULL)
-                THROW 50003, N'AddTask: A task cannot have a parent that is itself a step.', 1;
-            IF dbo.CanModifyTask(@TaskParentID, @UserID) = 0
-                THROW 50001, N'AddTask: You do not have permission to modify this task.', 1;
-            IF ISNULL(@ParentGroupID, -1) <> ISNULL(@GroupID, -1)
-                THROW 50003, N'AddTask: Parent task must belong to the same list.', 1;
-        END
-        DECLARE @EffectiveStatus INT = @TaskStatusID;
-        IF @GroupID IS NOT NULL AND @TaskParentID IS NULL AND dbo.CanManageGroup(@UserID, @GroupID) = 0
-            SET @EffectiveStatus = 1;
-        DECLARE @NextRanking INT;
-        SELECT @NextRanking = ISNULL(MAX(T.Ranking), 0) + 1
-        FROM dbo.Tasks T WITH (UPDLOCK, HOLDLOCK)
-        WHERE (T.TaskParentID = @TaskParentID OR (T.TaskParentID IS NULL AND @TaskParentID IS NULL))
-          AND ((@GroupID IS NULL AND T.UserID = @UserID AND T.GroupID IS NULL)
-               OR (@GroupID IS NOT NULL AND T.GroupID = @GroupID));
-        INSERT INTO dbo.Tasks (TaskParentID, TaskStatusID, UserID, GroupID, Ranking, TaskName, LevelOfImportanceID, Description, Color)
-        VALUES (@TaskParentID, @EffectiveStatus, @UserID, @GroupID, @NextRanking, @TaskName, @ImportanceLevelID, @Description, @Color);
-        COMMIT TRANSACTION;
-        SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK; THROW;
-    END CATCH;
-END
-GO
-
 CREATE PROCEDURE dbo.SaveTask
     @TaskID              INT = NULL,
     @TaskParentID        INT = NULL,
@@ -594,23 +545,9 @@ BEGIN
         IF @CurrentStatus = 1 AND dbo.CanManageGroup(@ActingUserID, @GroupID) = 0
             SET @TaskStatusID = 1;
         DECLARE @StatusForced BIT = CASE WHEN @TaskStatusID <> @RequestedStatus THEN 1 ELSE 0 END;
-        DECLARE @OldStart DATETIME2, @OldEnd DATETIME2, @RepetitionTypeID INT;
-        SELECT @OldStart = P.PlannedStartDate, @OldEnd = P.PlannedEndDate, @RepetitionTypeID = P.RepetitionTypeID
+        DECLARE @OldStart DATETIME2, @OldEnd DATETIME2;
+        SELECT @OldStart = P.PlannedStartDate, @OldEnd = P.PlannedEndDate
         FROM dbo.Planned P WHERE P.TaskID = @TaskID;
-        IF @TaskStatusID = 3 AND @RepetitionTypeID BETWEEN 2 AND 5 AND @OldStart IS NOT NULL
-        BEGIN
-            DECLARE @NewStart DATETIME2 = dbo.NextOccurrence(@OldStart, @RepetitionTypeID, GETDATE());
-            SET @OldEnd = CASE WHEN @OldEnd IS NULL THEN NULL
-                               ELSE DATEADD(DAY, DATEDIFF(DAY, @OldStart, @NewStart), @OldEnd) END;
-            UPDATE dbo.Planned SET PlannedStartDate = @NewStart, PlannedEndDate = @OldEnd
-            WHERE TaskID = @TaskID;
-            DECLARE @NextOccurrenceStatus INT = 2;
-            UPDATE dbo.Tasks SET TaskStatusID = @NextOccurrenceStatus WHERE TaskID = @TaskID;
-            SELECT @NextOccurrenceStatus AS TaskStatusID, @NewStart AS PlannedStartDate,
-                   @OldEnd AS PlannedEndDate, @StatusForced AS StatusForced;
-            COMMIT TRANSACTION;
-            RETURN;
-        END
         UPDATE dbo.Tasks SET TaskStatusID = @TaskStatusID WHERE TaskID = @TaskID;
         SELECT @TaskStatusID AS TaskStatusID, @OldStart AS PlannedStartDate,
                @OldEnd AS PlannedEndDate, @StatusForced AS StatusForced;
@@ -650,27 +587,19 @@ BEGIN
 END
 GO
 
-CREATE PROCEDURE dbo.GetTaskParents
+CREATE PROCEDURE dbo.GetParentTasks
     @UserID       INT,
+    @GroupID      INT = NULL,
     @ByImportance BIT = 0
 AS
 BEGIN
+    IF @GroupID IS NOT NULL AND dbo.IsGroupMember(@UserID, @GroupID) = 0
+        THROW 50001, N'GetParentTasks: You do not have access to this group.', 1;
     SELECT * FROM dbo.Tasks
-    WHERE TaskParentID IS NULL AND UserID = @UserID AND GroupID IS NULL
+    WHERE TaskParentID IS NULL
+      AND ((@GroupID IS NULL AND UserID = @UserID AND GroupID IS NULL)
+           OR GroupID = @GroupID)
     ORDER BY CASE WHEN @ByImportance = 1 THEN LevelOfImportanceID END DESC, Ranking, LevelOfImportanceID DESC;
-END
-GO
-
-CREATE PROCEDURE dbo.GetGroupParentTasks
-    @GroupID      INT,
-    @ActingUserID INT
-AS
-BEGIN
-    IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
-        THROW 50001, N'GetGroupParentTasks: You do not have access to this group.', 1;
-    SELECT * FROM dbo.Tasks
-    WHERE TaskParentID IS NULL AND GroupID = @GroupID
-    ORDER BY Ranking, LevelOfImportanceID DESC;
 END
 GO
 
@@ -903,6 +832,7 @@ BEGIN
     UPDATE T SET T.TaskStatusID = 2
     FROM dbo.Tasks T JOIN @Rolled R ON T.TaskID = R.TaskID
     WHERE T.TaskStatusID = 3;
+    SELECT CAST(COUNT(*) AS INT) FROM @Rolled;
 END
 GO
 

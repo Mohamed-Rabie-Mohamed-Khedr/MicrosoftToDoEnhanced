@@ -13,17 +13,47 @@ public sealed class MessageBoxConfirmationService
 
 public static class GroupDialogService
 {
-    public static readonly MessageBoxConfirmationService Confirmation = new();
+    private static readonly MessageBoxConfirmationService Confirmation = new();
 
-    public static async Task<int?> ShowAsync(Window ownerWindow, MainViewModel owner, Group? group = null)
+    public static int? ShowCreate(Window ownerWindow, MainViewModel owner)
     {
-        var viewModel = new GroupSettingsViewModel(owner.User, group, owner, Confirmation);
-        var window = new GroupSettingsView { Owner = ownerWindow, DataContext = viewModel };
+        var viewModel = new GroupEditorViewModel(owner.User, owner, confirmation: Confirmation);
+        var window = new GroupEditorView { Owner = ownerWindow, DataContext = viewModel };
         viewModel.RequestClose += (_, _) => window.Close();
+
+        window.ShowDialog();
+
+        return viewModel.GroupId;
+    }
+
+    private static Group? ShowEdit(Window ownerWindow, MainViewModel owner, Group group)
+    {
+        var viewModel = new GroupEditorViewModel(owner.User, owner, group, Confirmation);
+        var window = new GroupEditorView { Owner = ownerWindow, DataContext = viewModel };
+        viewModel.RequestClose += (_, _) => window.Close();
+
+        window.ShowDialog();
+
+        return viewModel.Deleted ? null : viewModel.GetUpdatedGroup();
+    }
+
+    public static async Task<bool> ShowChatAsync(Window ownerWindow, MainViewModel owner, Group group)
+    {
+        var viewModel = new GroupChatViewModel(owner.User, group, owner);
+        var window = new GroupChatView { Owner = ownerWindow, DataContext = viewModel };
+        viewModel.RequestClose += (_, _) => window.Close();
+        viewModel.RequestEditGroup += (_, _) =>
+        {
+            var updated = ShowEdit(window, owner, viewModel.GetGroupSnapshot());
+            if (updated is null)
+                window.Close();
+            else
+                viewModel.ApplyGroupUpdate(updated);
+        };
 
         await viewModel.InitializeAsync();
         window.ShowDialog();
 
-        return viewModel.GroupId;
+        return viewModel.EditTasksRequested;
     }
 }

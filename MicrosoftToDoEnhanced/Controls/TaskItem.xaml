@@ -7,13 +7,16 @@
              d:DesignHeight="72" d:DesignWidth="480">
 
     <Border x:Name="Root"
-            Padding="{Binding RowPadding}"
             Margin="0,0,0,8"
             MouseLeftButtonUp="OnItemClicked"
             AllowDrop="True">
         <Border.Style>
             <Style TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                <Setter Property="Padding" Value="12,10,12,10"/>
                 <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsStep}" Value="True">
+                        <Setter Property="Padding" Value="36,10,12,10"/>
+                    </DataTrigger>
                     <Trigger Property="IsMouseOver" Value="True">
                         <Setter Property="Background" Value="{DynamicResource CardHoverBackgroundBrush}"/>
                         <Trigger.EnterActions>
@@ -68,7 +71,7 @@
                         </Setter>
                     </Style>
                 </Button.Style>
-                <Path x:Name="Arrow" Width="11" Height="11" Stretch="Uniform"
+                <Path Width="11" Height="11" Stretch="Uniform"
                       Fill="{DynamicResource TextTertiaryBrush}"
                       Data="M10,5 L6,1 L6,3.5 L0,3.5 L0,6.5 L6,6.5 L6,9 Z">
                     <Path.Style>
@@ -106,7 +109,7 @@
             </Grid>
 
             <CheckBox Grid.Column="2" VerticalAlignment="Center" Margin="0,0,10,0"
-                      IsChecked="{Binding IsCompleted, Mode=TwoWay}"
+                      IsChecked="{Binding IsCompleted, Mode=OneWay}"
                       Command="{Binding DataContext.ToggleTaskStatusCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                       CommandParameter="{Binding}"
                       ClickMode="Press" Cursor="Hand">
@@ -167,12 +170,12 @@
 
                 <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
                     <StackPanel Orientation="Horizontal"
-                                Visibility="{Binding DueDate, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}">
+                                Visibility="{Binding DueDateDisplay, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Invert}">
                         <Path Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center"
                               Fill="{DynamicResource TextTertiaryBrush}"
                               Data="M0,1.2 L10,1.2 L10,9 L0,9 Z M1.2,0 L2.2,0 L2.2,1.8 L1.2,1.8 Z M7.8,0 L8.8,0 L8.8,1.8 L7.8,1.8 Z M1.5,3.5 L8.5,3.5 L8.5,7.8 L1.5,7.8 Z"/>
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="4,0,10,0"
-                                   Text="{Binding DueDate, StringFormat='ddd, MMM d'}"/>
+                                   Text="{Binding DueDateDisplay}"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal"
