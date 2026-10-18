@@ -53,6 +53,7 @@ public static class GroupDialogService
 
         await viewModel.InitializeAsync();
         window.ShowDialog();
+        viewModel.StopPolling();
 
         return viewModel.EditTasksRequested;
     }

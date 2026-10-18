@@ -523,7 +523,10 @@ public class MainViewModel : ViewModelBase
             ShowDetail(_sourceViewModels.FirstOrDefault(t => t.TaskID == preservedDetail.TaskID), null);
         }
 
-        CurrentViewSubtitle = $"{Tasks.Count} task{(Tasks.Count == 1 ? "" : "s")}";
+        var visibleTaskCount = searching
+            ? viewModels.Count
+            : _sourceViewModels.Sum(t => 1 + t.Steps.Count);
+        CurrentViewSubtitle = $"{visibleTaskCount} task{(visibleTaskCount == 1 ? "" : "s")}";
         OnPropertyChanged(nameof(HasTasks));
     }
 

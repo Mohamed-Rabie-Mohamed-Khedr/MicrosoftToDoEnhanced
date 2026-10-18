@@ -18,6 +18,8 @@ public partial class LoginView : Window
 
     public LoginView()
     {
+        ThemeManager.ApplyTheme(ThemeManager.LoadSavedTheme());
+        ThemeManager.ApplyAccentColor(ThemeManager.LoadSavedAccent());
         InitializeComponent();
         DataContext = _viewModel = new LoginViewModel(OpenMainWindow);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -62,6 +64,7 @@ public partial class LoginView : Window
     private void OpenMainWindow(User user)
     {
         ThemeManager.ApplyAccentColor(user.Color);
+        ThemeManager.SaveAccent(user.Color);
         new global::MicrosoftToDoEnhanced.MainWindow(user).Show();
         Close();
     }

@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        ThemeToggle.IsChecked = ThemeManager.CurrentTheme == AppTheme.Dark;
+
         var viewModel = new MainViewModel(user, this);
         viewModel.ToastRequested += (_, message) => ShowToast(message);
         viewModel.SignOutRequested += (_, _) =>
@@ -33,8 +35,12 @@ public partial class MainWindow : Window
         _ = viewModel.InitializeAsync();
     }
 
-    private void OnThemeToggled(object sender, RoutedEventArgs e) =>
-        ThemeManager.ApplyTheme(((ToggleButton)sender).IsChecked == true ? AppTheme.Dark : AppTheme.Light);
+    private void OnThemeToggled(object sender, RoutedEventArgs e)
+    {
+        var theme = ((ToggleButton)sender).IsChecked == true ? AppTheme.Dark : AppTheme.Light;
+        ThemeManager.ApplyTheme(theme);
+        ThemeManager.SaveTheme(theme);
+    }
 
     private void OnTaskReorderRequested(object sender, RoutedPropertyChangedEventArgs<object> e)
     {

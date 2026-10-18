@@ -1,3 +1,4 @@
+using System.Configuration;
 using System.Windows;
 using System.Windows.Media;
 
@@ -14,11 +15,61 @@ public static class ThemeManager
     private const string LightSource = "Themes/LightTheme.xaml";
     private const string DarkSource = "Themes/DarkTheme.xaml";
     private const string DefaultAccentHex = "#0078D4";
+    private const string ThemeSettingKey = "Theme";
+    private const string AccentSettingKey = "AccentColor";
 
     private static string CurrentAccentHex { get; set; } = DefaultAccentHex;
 
+    public static AppTheme CurrentTheme { get; private set; } = AppTheme.Light;
+
+    public static AppTheme LoadSavedTheme()
+    {
+        var saved = ConfigurationManager.AppSettings[ThemeSettingKey];
+        return string.Equals(saved, nameof(AppTheme.Dark), StringComparison.OrdinalIgnoreCase)
+            ? AppTheme.Dark
+            : AppTheme.Light;
+    }
+
+    public static void SaveTheme(AppTheme theme) => SaveSetting(ThemeSettingKey, theme.ToString());
+
+    public static string LoadSavedAccent()
+    {
+        var saved = ConfigurationManager.AppSettings[AccentSettingKey];
+        return string.IsNullOrWhiteSpace(saved) || !TryParseColor(saved, out _)
+            ? DefaultAccentHex
+            : saved;
+    }
+
+    public static void SaveAccent(string hexColor)
+    {
+        if (string.IsNullOrWhiteSpace(hexColor) || !TryParseColor(hexColor, out _))
+            return;
+
+        CurrentAccentHex = hexColor;
+        SaveSetting(AccentSettingKey, hexColor);
+    }
+
+    private static void SaveSetting(string key, string value)
+    {
+        try
+        {
+            var config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+            if (config.AppSettings.Settings[key] is null)
+                config.AppSettings.Settings.Add(key, value);
+            else
+                config.AppSettings.Settings[key].Value = value;
+            config.Save(ConfigurationSaveMode.Modified);
+            ConfigurationManager.RefreshSection("appSettings");
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     public static void ApplyTheme(AppTheme theme)
     {
+        CurrentTheme = theme;
+
         var app = Application.Current;
         if (app is null) return;
 

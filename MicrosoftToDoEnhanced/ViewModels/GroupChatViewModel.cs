@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Core.Repositories;
 
 namespace MicrosoftToDoEnhanced.ViewModels;
@@ -32,7 +33,10 @@ public class GroupChatViewModel : ViewModelBase
     private readonly MainViewModel _owner;
     private readonly Group _group;
     private int? _lowestPostId;
+    private int _highestPostId;
     private bool _hasMorePosts;
+    private bool _pollInProgress;
+    private DispatcherTimer? _pollTimer;
     private string _groupName;
     private string? _groupDescription;
     private string _color;
@@ -123,6 +127,45 @@ public class GroupChatViewModel : ViewModelBase
         await LoadMembersAsync();
         await LoadPostsAsync(loadMore: false);
         await LoadTasksAsync();
+        StartPolling();
+    }
+
+    public void StopPolling() => _pollTimer?.Stop();
+
+    private void StartPolling()
+    {
+        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _pollTimer.Tick += async (_, _) => await PollAsync();
+        _pollTimer.Start();
+    }
+
+    private async Task PollAsync()
+    {
+        if (_pollInProgress)
+            return;
+
+        _pollInProgress = true;
+        try
+        {
+            var posts = await PostRepository.GetPostsAsync(_group.GroupID, _currentUser.UserID, null, PageSize);
+            var fresh = posts.Where(p => p.PostID > _highestPostId).ToList();
+            if (fresh.Count == 0)
+                return;
+
+            _highestPostId = fresh.Max(p => p.PostID);
+            foreach (var post in fresh.AsEnumerable().Reverse())
+                Posts.Add(new PostItemViewModel(post));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _pollTimer?.Stop();
+            _owner.RaiseToast("You are no longer a member of this group");
+            RequestClose?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            _pollInProgress = false;
+        }
     }
 
     public void ApplyGroupUpdate(Group updated)
@@ -219,6 +262,9 @@ public class GroupChatViewModel : ViewModelBase
         var latest = await PostRepository.GetPostsAsync(_group.GroupID, _currentUser.UserID, null, 1);
         if (latest.Count > 0 && (Posts.Count == 0 || Posts[^1].PostID != latest[0].PostID))
             Posts.Add(new PostItemViewModel(latest[0]));
+
+        if (latest.Count > 0)
+            _highestPostId = Math.Max(_highestPostId, latest[0].PostID);
     }
 
     private async Task LoadPostsAsync(bool loadMore)
@@ -234,7 +280,10 @@ public class GroupChatViewModel : ViewModelBase
 
         HasMorePosts = posts.Count == PageSize;
         if (posts.Count > 0)
+        {
             _lowestPostId = posts.Min(p => p.PostID);
+            _highestPostId = Math.Max(_highestPostId, posts.Max(p => p.PostID));
+        }
 
         var index = 0;
         foreach (var post in posts.AsEnumerable().Reverse())

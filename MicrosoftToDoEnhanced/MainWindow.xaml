@@ -62,7 +62,7 @@
                         <TextBlock Text="To Do Enhanced" FontSize="14" FontWeight="SemiBold" Margin="10,0,0,0"
                                    VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
                     </StackPanel>
-                    <ToggleButton Style="{StaticResource ToggleSwitchStyle}"
+                    <ToggleButton x:Name="ThemeToggle" Style="{StaticResource ToggleSwitchStyle}"
                                   HorizontalAlignment="Right" VerticalAlignment="Center"
                                   ToolTip="Toggle light / dark theme"
                                   Checked="OnThemeToggled" Unchecked="OnThemeToggled"/>

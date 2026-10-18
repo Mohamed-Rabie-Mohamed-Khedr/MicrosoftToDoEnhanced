@@ -1,30 +1,20 @@
 ﻿SET QUOTED_IDENTIFIER ON;
 GO
 
-IF DB_ID(N'MicrosoftToDoEnhanced') IS NULL CREATE DATABASE MicrosoftToDoEnhanced;
+CREATE DATABASE MicrosoftToDoEnhanced;
 GO
 
 USE MicrosoftToDoEnhanced;
 GO
 
-DECLARE @DropSql NVARCHAR(MAX) = N'';
-SELECT @DropSql += N'DROP PROCEDURE IF EXISTS ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
-FROM sys.objects WHERE type = 'P' AND is_ms_shipped = 0;
-SELECT @DropSql += N'DROP FUNCTION IF EXISTS ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
-FROM sys.objects WHERE type IN ('FN', 'IF', 'TF') AND is_ms_shipped = 0;
-SELECT @DropSql += N'DROP TYPE IF EXISTS ' + QUOTENAME(SCHEMA_NAME(schema_id)) + N'.' + QUOTENAME(name) + N';' + CHAR(10)
-FROM sys.types WHERE is_user_defined = 1;
-EXEC sp_executesql @DropSql;
-GO
-
-IF OBJECT_ID(N'dbo.Permissions', N'U') IS NULL CREATE TABLE dbo.Permissions
+CREATE TABLE dbo.Permissions
 (
     PermissionID   INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Permissions PRIMARY KEY,
     PermissionName VARCHAR(20) NOT NULL CONSTRAINT UQ_Permissions_Name UNIQUE
 );
 GO
 
-IF OBJECT_ID(N'dbo.Users', N'U') IS NULL CREATE TABLE dbo.Users
+CREATE TABLE dbo.Users
 (
     UserID       INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Users PRIMARY KEY,
     UserName     NVARCHAR(100) NOT NULL CONSTRAINT UQ_Users_UserName UNIQUE,
@@ -38,7 +28,7 @@ IF OBJECT_ID(N'dbo.Users', N'U') IS NULL CREATE TABLE dbo.Users
 );
 GO
 
-IF OBJECT_ID(N'dbo.Groups', N'U') IS NULL CREATE TABLE dbo.Groups
+CREATE TABLE dbo.Groups
 (
     GroupID          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Groups PRIMARY KEY,
     AdminID          INT NOT NULL,
@@ -49,7 +39,7 @@ IF OBJECT_ID(N'dbo.Groups', N'U') IS NULL CREATE TABLE dbo.Groups
 );
 GO
 
-IF OBJECT_ID(N'dbo.GroupMembers', N'U') IS NULL CREATE TABLE dbo.GroupMembers
+CREATE TABLE dbo.GroupMembers
 (
     GroupMemberID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_GroupMembers PRIMARY KEY,
     GroupID       INT NOT NULL,
@@ -60,7 +50,7 @@ IF OBJECT_ID(N'dbo.GroupMembers', N'U') IS NULL CREATE TABLE dbo.GroupMembers
 );
 GO
 
-IF OBJECT_ID(N'dbo.PostsInGroups', N'U') IS NULL CREATE TABLE dbo.PostsInGroups
+CREATE TABLE dbo.PostsInGroups
 (
     PostID      INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_PostsInGroups PRIMARY KEY,
     GroupID     INT NOT NULL,
@@ -73,7 +63,7 @@ IF OBJECT_ID(N'dbo.PostsInGroups', N'U') IS NULL CREATE TABLE dbo.PostsInGroups
 );
 GO
 
-IF OBJECT_ID(N'dbo.TaskStatus', N'U') IS NULL CREATE TABLE dbo.TaskStatus
+CREATE TABLE dbo.TaskStatus
 (
     TaskStatusID      INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_TaskStatus PRIMARY KEY,
     StatusName        VARCHAR(20) NOT NULL CONSTRAINT UQ_TaskStatus_Name UNIQUE,
@@ -81,7 +71,7 @@ IF OBJECT_ID(N'dbo.TaskStatus', N'U') IS NULL CREATE TABLE dbo.TaskStatus
 );
 GO
 
-IF OBJECT_ID(N'dbo.LevelOfImportance', N'U') IS NULL CREATE TABLE dbo.LevelOfImportance
+CREATE TABLE dbo.LevelOfImportance
 (
     LevelOfImportanceID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_LevelOfImportance PRIMARY KEY,
     LevelName           VARCHAR(20) NOT NULL CONSTRAINT UQ_LevelOfImportance_Name UNIQUE,
@@ -89,7 +79,7 @@ IF OBJECT_ID(N'dbo.LevelOfImportance', N'U') IS NULL CREATE TABLE dbo.LevelOfImp
 );
 GO
 
-IF OBJECT_ID(N'dbo.Tasks', N'U') IS NULL CREATE TABLE dbo.Tasks
+CREATE TABLE dbo.Tasks
 (
     TaskID              INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Tasks PRIMARY KEY,
     TaskParentID        INT NULL,
@@ -110,7 +100,7 @@ IF OBJECT_ID(N'dbo.Tasks', N'U') IS NULL CREATE TABLE dbo.Tasks
 );
 GO
 
-IF OBJECT_ID(N'dbo.Attachments', N'U') IS NULL CREATE TABLE dbo.Attachments
+CREATE TABLE dbo.Attachments
 (
     AttachmentID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Attachments PRIMARY KEY,
     TaskID       INT NOT NULL,
@@ -121,7 +111,7 @@ IF OBJECT_ID(N'dbo.Attachments', N'U') IS NULL CREATE TABLE dbo.Attachments
 );
 GO
 
-IF OBJECT_ID(N'dbo.Assigned', N'U') IS NULL CREATE TABLE dbo.Assigned
+CREATE TABLE dbo.Assigned
 (
     AssignedID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Assigned PRIMARY KEY,
     TaskID     INT NOT NULL,
@@ -132,14 +122,14 @@ IF OBJECT_ID(N'dbo.Assigned', N'U') IS NULL CREATE TABLE dbo.Assigned
 );
 GO
 
-IF OBJECT_ID(N'dbo.RepetitionTypes', N'U') IS NULL CREATE TABLE dbo.RepetitionTypes
+CREATE TABLE dbo.RepetitionTypes
 (
     RepetitionTypeID INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_RepetitionTypes PRIMARY KEY,
     RepetitionName   VARCHAR(20) NOT NULL CONSTRAINT UQ_RepetitionTypes_Name UNIQUE
 );
 GO
 
-IF OBJECT_ID(N'dbo.Planned', N'U') IS NULL CREATE TABLE dbo.Planned
+CREATE TABLE dbo.Planned
 (
     PlannedID        INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Planned PRIMARY KEY,
     TaskID           INT NOT NULL,
@@ -151,37 +141,25 @@ IF OBJECT_ID(N'dbo.Planned', N'U') IS NULL CREATE TABLE dbo.Planned
 );
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.Permissions)
-BEGIN
-    INSERT INTO dbo.Permissions (PermissionName) VALUES (N'Person');
-    INSERT INTO dbo.Permissions (PermissionName) VALUES (N'Admin');
-END
+INSERT INTO dbo.Permissions (PermissionName) VALUES (N'Person');
+INSERT INTO dbo.Permissions (PermissionName) VALUES (N'Admin');
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.TaskStatus)
-BEGIN
-    INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Pending', N'Task is pending for admin approval');
-    INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Incomplete', N'Task is incomplete');
-    INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Completed', N'Task is completed');
-END
+INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Pending', N'Task is pending for admin approval');
+INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Incomplete', N'Task is incomplete');
+INSERT INTO dbo.TaskStatus (StatusName, StatusDescription) VALUES (N'Completed', N'Task is completed');
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.LevelOfImportance)
-BEGIN
-    INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'Low', N'#7BA05B');
-    INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'Medium', N'#C77D00');
-    INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'High', N'#D13438');
-END
+INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'Low', N'#7BA05B');
+INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'Medium', N'#C77D00');
+INSERT INTO dbo.LevelOfImportance (LevelName, Color) VALUES (N'High', N'#D13438');
 GO
 
-IF NOT EXISTS (SELECT 1 FROM dbo.RepetitionTypes)
-BEGIN
-    INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'None');
-    INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Daily');
-    INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Weekly');
-    INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Monthly');
-    INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Yearly');
-END
+INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'None');
+INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Daily');
+INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Weekly');
+INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Monthly');
+INSERT INTO dbo.RepetitionTypes (RepetitionName) VALUES (N'Yearly');
 GO
 
 CREATE FUNCTION dbo.UserExists (@UserName NVARCHAR(100))
@@ -700,32 +678,61 @@ AS
 BEGIN
     DECLARE @Today DATE = CAST(GETDATE() AS DATE);
     DECLARE @AllCount INT, @ImportantCount INT, @TodayCount INT, @PlannedCount INT;
-    SELECT @AllCount = COUNT(*),
-           @ImportantCount = ISNULL(SUM(CASE WHEN T.LevelOfImportanceID = 3 THEN 1 ELSE 0 END), 0),
-           @PlannedCount = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL THEN 1 ELSE 0 END), 0),
-           @TodayCount = ISNULL(SUM(CASE WHEN P.TaskID IS NOT NULL AND CAST(P.PlannedStartDate AS DATE) <= @Today
-                                          AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
-                                         THEN 1 ELSE 0 END), 0)
-    FROM dbo.Tasks T
-    LEFT JOIN dbo.Planned P ON P.TaskID = T.TaskID
-    WHERE T.TaskParentID IS NULL
-      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-      AND T.UserID = @UserID AND T.GroupID IS NULL;
 
-    SELECT @TodayCount = @TodayCount + COUNT(*)
+    SELECT @AllCount = COUNT(*)
     FROM dbo.Tasks T
-    INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
     WHERE T.UserID = @UserID AND T.GroupID IS NULL
-      AND T.TaskParentID IS NOT NULL
       AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
-      AND CAST(P.PlannedStartDate AS DATE) <= @Today
-      AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
-      AND NOT EXISTS (SELECT 1
-                      FROM dbo.Tasks TP
-                      INNER JOIN dbo.Planned PP ON PP.TaskID = TP.TaskID
-                      WHERE TP.TaskID = T.TaskParentID
-                        AND CAST(PP.PlannedStartDate AS DATE) <= @Today
-                        AND (PP.PlannedEndDate IS NULL OR CAST(PP.PlannedEndDate AS DATE) >= @Today));
+      AND (T.TaskParentID IS NULL
+        OR EXISTS (SELECT 1 FROM dbo.Tasks P
+                   WHERE P.TaskID = T.TaskParentID
+                     AND P.TaskParentID IS NULL));
+
+    SELECT @ImportantCount = COUNT(*)
+    FROM dbo.Tasks T
+    WHERE T.UserID = @UserID AND T.GroupID IS NULL
+      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+      AND ((T.TaskParentID IS NULL AND T.LevelOfImportanceID = 3)
+        OR (T.TaskParentID IS NOT NULL
+            AND EXISTS (SELECT 1 FROM dbo.Tasks P
+                        WHERE P.TaskID = T.TaskParentID
+                          AND P.TaskParentID IS NULL
+                          AND P.LevelOfImportanceID = 3)));
+
+    SELECT @PlannedCount = COUNT(*)
+    FROM dbo.Tasks T
+    WHERE T.UserID = @UserID AND T.GroupID IS NULL
+      AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+      AND ((T.TaskParentID IS NULL
+            AND EXISTS (SELECT 1 FROM dbo.Planned P WHERE P.TaskID = T.TaskID))
+        OR (T.TaskParentID IS NOT NULL
+            AND EXISTS (SELECT 1 FROM dbo.Tasks P
+                        INNER JOIN dbo.Planned PP ON PP.TaskID = P.TaskID
+                        WHERE P.TaskID = T.TaskParentID
+                          AND P.TaskParentID IS NULL)));
+
+    ;WITH TodayRoots AS (
+        SELECT T.TaskID
+        FROM dbo.Tasks T
+        INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
+        WHERE T.UserID = @UserID AND T.GroupID IS NULL
+          AND (@IncludeCompleted = 1 OR T.TaskStatusID <> 3)
+          AND CAST(P.PlannedStartDate AS DATE) <= @Today
+          AND (P.PlannedEndDate IS NULL OR CAST(P.PlannedEndDate AS DATE) >= @Today)
+          AND (T.TaskParentID IS NULL
+            OR NOT EXISTS (SELECT 1
+                           FROM dbo.Tasks TP
+                           INNER JOIN dbo.Planned PP ON PP.TaskID = TP.TaskID
+                           WHERE TP.TaskID = T.TaskParentID
+                             AND CAST(PP.PlannedStartDate AS DATE) <= @Today
+                             AND (PP.PlannedEndDate IS NULL OR CAST(PP.PlannedEndDate AS DATE) >= @Today)))
+    )
+    SELECT @TodayCount =
+        (SELECT COUNT(*) FROM TodayRoots)
+      + (SELECT COUNT(*) FROM dbo.Tasks C
+         WHERE C.UserID = @UserID AND C.GroupID IS NULL
+           AND (@IncludeCompleted = 1 OR C.TaskStatusID <> 3)
+           AND EXISTS (SELECT 1 FROM TodayRoots R WHERE R.TaskID = C.TaskParentID));
 
     SELECT @AllCount AS AllCount, @TodayCount AS TodayCount,
            @ImportantCount AS ImportantCount, @PlannedCount AS PlannedCount;
@@ -878,14 +885,14 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_PersonalScope' AND object_id = OBJECT_ID(N'dbo.Tasks')) CREATE INDEX IX_Tasks_PersonalScope ON dbo.Tasks (UserID, TaskParentID, Ranking);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_GroupScope' AND object_id = OBJECT_ID(N'dbo.Tasks')) CREATE INDEX IX_Tasks_GroupScope ON dbo.Tasks (GroupID, TaskParentID, Ranking);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Tasks_Parent' AND object_id = OBJECT_ID(N'dbo.Tasks')) CREATE INDEX IX_Tasks_Parent ON dbo.Tasks (TaskParentID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Users_UserEmail' AND object_id = OBJECT_ID(N'dbo.Users')) CREATE UNIQUE INDEX UQ_Users_UserEmail ON dbo.Users (UserEmail) WHERE UserEmail IS NOT NULL;
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Groups_AdminID' AND object_id = OBJECT_ID(N'dbo.Groups')) CREATE INDEX IX_Groups_AdminID ON dbo.Groups (AdminID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_GroupMembers_UserID' AND object_id = OBJECT_ID(N'dbo.GroupMembers')) CREATE INDEX IX_GroupMembers_UserID ON dbo.GroupMembers (UserID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PostsInGroups_Group' AND object_id = OBJECT_ID(N'dbo.PostsInGroups')) CREATE INDEX IX_PostsInGroups_Group ON dbo.PostsInGroups (GroupID, PostID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Attachments_TaskID' AND object_id = OBJECT_ID(N'dbo.Attachments')) CREATE INDEX IX_Attachments_TaskID ON dbo.Attachments (TaskID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Assigned_ToUser' AND object_id = OBJECT_ID(N'dbo.Assigned')) CREATE INDEX IX_Assigned_ToUser ON dbo.Assigned (ToUserID);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_Planned_TaskID' AND object_id = OBJECT_ID(N'dbo.Planned')) CREATE UNIQUE INDEX UQ_Planned_TaskID ON dbo.Planned (TaskID);
+CREATE INDEX IX_Tasks_PersonalScope ON dbo.Tasks (UserID, TaskParentID, Ranking);
+CREATE INDEX IX_Tasks_GroupScope ON dbo.Tasks (GroupID, TaskParentID, Ranking);
+CREATE INDEX IX_Tasks_Parent ON dbo.Tasks (TaskParentID);
+CREATE UNIQUE INDEX UQ_Users_UserEmail ON dbo.Users (UserEmail) WHERE UserEmail IS NOT NULL;
+CREATE INDEX IX_Groups_AdminID ON dbo.Groups (AdminID);
+CREATE INDEX IX_GroupMembers_UserID ON dbo.GroupMembers (UserID);
+CREATE INDEX IX_PostsInGroups_Group ON dbo.PostsInGroups (GroupID, PostID);
+CREATE INDEX IX_Attachments_TaskID ON dbo.Attachments (TaskID);
+CREATE INDEX IX_Assigned_ToUser ON dbo.Assigned (ToUserID);
+CREATE UNIQUE INDEX UQ_Planned_TaskID ON dbo.Planned (TaskID);
 GO
