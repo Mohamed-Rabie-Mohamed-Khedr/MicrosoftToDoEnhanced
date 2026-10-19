@@ -276,6 +276,91 @@ BEGIN
 END
 GO
 
+CREATE PROCEDURE dbo.UpdateUserInfo
+    @UserID       INT,
+    @UserName     NVARCHAR(100),
+    @ShowName     NVARCHAR(100),
+    @UserEmail    VARCHAR(255),
+    @Color        VARCHAR(16) = '#FFFFFF'
+AS
+BEGIN
+    SET @UserEmail = CASE WHEN NULLIF(LTRIM(RTRIM(@UserEmail)), N'') IS NULL THEN NULL
+                          ELSE LOWER(LTRIM(RTRIM(@UserEmail))) END;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @UserID)
+        THROW 50002, N'UpdateUserInfo: User was not found.', 1;
+    IF dbo.UserExists(@UserName) = 1
+        AND NOT EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @UserID AND UserName = @UserName)
+        THROW 50003, N'UpdateUserInfo: This username is already taken.', 1;
+    IF @UserEmail IS NOT NULL
+        AND EXISTS (SELECT 1 FROM dbo.Users WHERE UserEmail = @UserEmail AND UserID <> @UserID)
+        THROW 50003, N'UpdateUserInfo: This email is already in use.', 1;
+
+    UPDATE dbo.Users
+    SET UserName = @UserName,
+        ShowName = @ShowName,
+        UserEmail = @UserEmail,
+        Color = @Color
+    WHERE UserID = @UserID;
+END
+GO
+
+CREATE PROCEDURE dbo.DeleteUserAccount
+    @UserID INT
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        IF NOT EXISTS (SELECT 1 FROM dbo.Users WHERE UserID = @UserID)
+            THROW 50002, N'DeleteUserAccount: User was not found.', 1;
+
+        DECLARE @OwnedGroups TABLE (GroupID INT PRIMARY KEY);
+        INSERT INTO @OwnedGroups (GroupID)
+        SELECT GroupID FROM dbo.Groups WHERE AdminID = @UserID;
+
+        DECLARE @GroupTasks TABLE (TaskID INT PRIMARY KEY);
+        INSERT INTO @GroupTasks (TaskID)
+        SELECT TaskID FROM dbo.Tasks WHERE GroupID IN (SELECT GroupID FROM @OwnedGroups);
+
+        DELETE FROM dbo.Attachments   WHERE TaskID IN (SELECT TaskID FROM @GroupTasks);
+        DELETE FROM dbo.Assigned      WHERE TaskID IN (SELECT TaskID FROM @GroupTasks);
+        DELETE FROM dbo.Planned       WHERE TaskID IN (SELECT TaskID FROM @GroupTasks);
+        DELETE FROM dbo.Tasks         WHERE TaskID IN (SELECT TaskID FROM @GroupTasks)
+                                         AND TaskParentID IS NOT NULL;
+        DELETE FROM dbo.Tasks         WHERE TaskID IN (SELECT TaskID FROM @GroupTasks);
+        DELETE FROM dbo.PostsInGroups WHERE GroupID IN (SELECT GroupID FROM @OwnedGroups);
+        DELETE FROM dbo.GroupMembers  WHERE GroupID IN (SELECT GroupID FROM @OwnedGroups);
+        DELETE FROM dbo.Groups        WHERE GroupID IN (SELECT GroupID FROM @OwnedGroups);
+
+        DECLARE @PersonalTasks TABLE (TaskID INT PRIMARY KEY);
+        INSERT INTO @PersonalTasks (TaskID)
+        SELECT TaskID FROM dbo.Tasks WHERE UserID = @UserID AND GroupID IS NULL;
+
+        DELETE FROM dbo.Attachments WHERE TaskID IN (SELECT TaskID FROM @PersonalTasks);
+        DELETE FROM dbo.Assigned    WHERE TaskID IN (SELECT TaskID FROM @PersonalTasks);
+        DELETE FROM dbo.Planned     WHERE TaskID IN (SELECT TaskID FROM @PersonalTasks);
+        DELETE FROM dbo.Tasks       WHERE TaskID IN (SELECT TaskID FROM @PersonalTasks)
+                                       AND TaskParentID IS NOT NULL;
+        DELETE FROM dbo.Tasks       WHERE TaskID IN (SELECT TaskID FROM @PersonalTasks);
+
+        UPDATE T SET UserID = G.AdminID
+        FROM dbo.Tasks T
+        INNER JOIN dbo.Groups G ON G.GroupID = T.GroupID
+        WHERE T.UserID = @UserID;
+
+        DELETE FROM dbo.Assigned      WHERE ToUserID = @UserID;
+        DELETE FROM dbo.GroupMembers  WHERE UserID = @UserID;
+        DELETE FROM dbo.PostsInGroups WHERE UserID = @UserID;
+        DELETE FROM dbo.Users         WHERE UserID = @UserID;
+
+        COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK; THROW;
+    END CATCH;
+END
+GO
+
 CREATE PROCEDURE dbo.AddGroup
     @AdminID           INT,
     @GroupName         NVARCHAR(100),
@@ -709,7 +794,12 @@ BEGIN
             AND EXISTS (SELECT 1 FROM dbo.Tasks P
                         INNER JOIN dbo.Planned PP ON PP.TaskID = P.TaskID
                         WHERE P.TaskID = T.TaskParentID
-                          AND P.TaskParentID IS NULL)));
+                          AND P.TaskParentID IS NULL))
+        OR (T.TaskParentID IS NOT NULL
+            AND EXISTS (SELECT 1 FROM dbo.Planned P WHERE P.TaskID = T.TaskID)
+            AND NOT EXISTS (SELECT 1 FROM dbo.Tasks P
+                            INNER JOIN dbo.Planned PP ON PP.TaskID = P.TaskID
+                            WHERE P.TaskID = T.TaskParentID)));
 
     ;WITH TodayRoots AS (
         SELECT T.TaskID
@@ -751,8 +841,8 @@ BEGIN
         THROW 50001, N'AddAttachment: You do not have permission to modify this task.', 1;
     IF @FileData IS NULL
         THROW 50003, N'AddAttachment: Attachment content is required.', 1;
-    IF DATALENGTH(@FileData) > 10 * 1024 * 1024
-        THROW 50003, N'AddAttachment: Attachment exceeds the maximum allowed size of 10 MB.', 1;
+    IF DATALENGTH(@FileData) > 100 * 1024 * 1024
+        THROW 50003, N'AddAttachment: Attachment exceeds the maximum allowed size of 100 MB.', 1;
     INSERT INTO dbo.Attachments (TaskID, FileName, FileData, FileSizeKB)
     VALUES (@TaskID, @FileName, @FileData, CAST(CEILING(DATALENGTH(@FileData) / 1024.0) AS INT));
     SELECT CAST(SCOPE_IDENTITY() AS INT) AS NewID;
@@ -854,7 +944,12 @@ BEGIN
     BEGIN
         SELECT T.* FROM dbo.Tasks T
         INNER JOIN dbo.Planned P ON P.TaskID = T.TaskID
-        WHERE T.UserID = @UserID AND T.GroupID IS NULL AND T.TaskParentID IS NULL
+        WHERE T.UserID = @UserID AND T.GroupID IS NULL
+          AND (T.TaskParentID IS NULL
+            OR NOT EXISTS (SELECT 1
+                           FROM dbo.Tasks TP
+                           INNER JOIN dbo.Planned PP ON PP.TaskID = TP.TaskID
+                           WHERE TP.TaskID = T.TaskParentID))
         ORDER BY CAST(P.PlannedStartDate AS DATE), T.Ranking;
         RETURN;
     END

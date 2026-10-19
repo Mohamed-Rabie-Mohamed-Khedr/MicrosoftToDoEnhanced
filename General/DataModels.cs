@@ -5,6 +5,7 @@ namespace General.Models;
 public class User
 {
     public int UserID { get; set; }
+    public string UserName { get; set; } = string.Empty;
     public string ShowName { get; set; } = string.Empty;
     public string? UserEmail { get; set; }
     public string Color { get; set; } = string.Empty;
@@ -14,6 +15,7 @@ public class User
     public User(DataRow dr)
     {
         UserID = Convert.ToInt32(dr["UserID"]);
+        UserName = dr["UserName"].ToString() ?? string.Empty;
         ShowName = dr["ShowName"].ToString() ?? string.Empty;
 
         if (dr["UserEmail"] != DBNull.Value)
@@ -163,5 +165,5 @@ public static class DbLimits
 
     public const int MaxFileNameLength = 260;
 
-    public const long MaxAttachmentBytes = 10L * 1024 * 1024;
+    public const long MaxAttachmentBytes = 100L * 1024 * 1024;
 }

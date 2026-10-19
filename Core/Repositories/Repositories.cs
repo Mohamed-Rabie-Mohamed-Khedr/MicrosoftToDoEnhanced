@@ -356,7 +356,7 @@ public static class GroupRepository
             IF dbo.IsGroupMember(@ActingUserID, @GroupID) = 0
                 THROW 50001, N'You do not have access to this group.', 1;
 
-            SELECT U.UserID, U.ShowName, U.UserEmail, U.Color FROM Users U
+            SELECT U.UserID, U.UserName, U.ShowName, U.UserEmail, U.Color FROM Users U
             WHERE U.UserID = (SELECT AdminID FROM Groups WHERE GroupID = @GroupID)
                OR U.UserID IN (SELECT UserID FROM GroupMembers WHERE GroupID = @GroupID)
             ORDER BY U.ShowName
@@ -444,7 +444,7 @@ public static class AssignedTaskRepository
     {
         var rows = await SqlHelper.QueryAsync(
             """
-            SELECT TOP 1 U.UserID, U.ShowName, U.UserEmail, U.Color FROM Assigned A
+            SELECT TOP 1 U.UserID, U.UserName, U.ShowName, U.UserEmail, U.Color FROM Assigned A
             JOIN Users U ON A.ToUserID = U.UserID
             JOIN Tasks T ON A.TaskID = T.TaskID
             WHERE A.TaskID = @TaskID
@@ -536,7 +536,7 @@ public static class PostRepository
 
 public static class UserRepository
 {
-    private const string UserColumns = "UserID, ShowName, UserEmail, Color";
+    private const string UserColumns = "UserID, UserName, ShowName, UserEmail, Color";
 
     private static async Task<bool> UserExistsAsync(string userName)
     {
@@ -583,6 +583,56 @@ public static class UserRepository
         SqlHelper.ExecuteAsync("UpdatePasswordHash", true,
             new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
             new SqlParameter("@PasswordHash", SqlDbType.VarChar, DbLimits.MaxPasswordHashLength) { Value = passwordHash });
+
+    public sealed record UpdateProfileResult(bool Success, string? ErrorMessage)
+    {
+        public static UpdateProfileResult Succeeded() => new(true, null);
+        public static UpdateProfileResult Failed(string message) => new(false, message);
+    }
+
+    public static async Task<UpdateProfileResult> UpdateUserInfoAsync(
+        int userId, string userName, string showName, string? email, string color)
+    {
+        var trimmedName = userName.Trim();
+        if (trimmedName.Length == 0)
+            return UpdateProfileResult.Failed("User name is required");
+
+        if (trimmedName.Contains(' ') || trimmedName.Contains('\t'))
+            return UpdateProfileResult.Failed("User name cannot contain spaces");
+
+        if (trimmedName.Length < DbLimits.MinUserNameLength
+            || trimmedName.Length > DbLimits.MaxUserNameLength)
+            return UpdateProfileResult.Failed(
+                $"User name must be {DbLimits.MinUserNameLength}-{DbLimits.MaxUserNameLength} characters");
+
+        var trimmedShowName = string.IsNullOrWhiteSpace(showName) ? trimmedName : showName.Trim();
+        if (trimmedShowName.Length > DbLimits.MaxShowNameLength)
+            return UpdateProfileResult.Failed($"Display name cannot exceed {DbLimits.MaxShowNameLength} characters");
+
+        var trimmedEmail = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+        if (trimmedEmail is not null && trimmedEmail.Length > DbLimits.MaxEmailLength)
+            return UpdateProfileResult.Failed($"Email cannot exceed {DbLimits.MaxEmailLength} characters");
+
+        var existing = await GetUserByUserNameAsync(trimmedName);
+        if (existing is not null && existing.UserID != userId)
+            return UpdateProfileResult.Failed("This username is already taken");
+
+        await SqlHelper.ExecuteAsync("UpdateUserInfo", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId },
+            new SqlParameter("@UserName", SqlDbType.NVarChar, DbLimits.MaxUserNameLength) { Value = trimmedName },
+            new SqlParameter("@ShowName", SqlDbType.NVarChar, DbLimits.MaxShowNameLength) { Value = trimmedShowName },
+            new SqlParameter("@UserEmail", SqlDbType.VarChar, DbLimits.MaxEmailLength)
+            {
+                Value = trimmedEmail ?? (object)DBNull.Value
+            },
+            new SqlParameter("@Color", SqlDbType.VarChar, 16) { Value = color });
+
+        return UpdateProfileResult.Succeeded();
+    }
+
+    public static Task DeleteUserAccountAsync(int userId) =>
+        SqlHelper.ExecuteAsync("DeleteUserAccount", true,
+            new SqlParameter("@UserID", SqlDbType.Int) { Value = userId });
 
     public sealed record SignInResult(bool Success, User? User, bool NeedsRehash)
     {

@@ -54,6 +54,7 @@ public class MainViewModel : ViewModelBase
         OpenGroupChatCommand = new AsyncRelayCommand<Group>(OpenGroupChatAsync, onError: OnAsyncCommandError);
         CreateGroupCommand = new AsyncRelayCommand(CreateGroupAsync, onError: OnAsyncCommandError);
         SignOutCommand = new RelayCommand(() => SignOutRequested?.Invoke(this, EventArgs.Empty));
+        EditProfileCommand = new RelayCommand(EditProfile);
         CloseDetailsCommand = new RelayCommand(() => SelectedTask = null);
         BackDetailsCommand = new RelayCommand(BackToParent);
         ToggleTaskStatusCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleTaskStatusAsync, onError: OnAsyncCommandError);
@@ -73,6 +74,7 @@ public class MainViewModel : ViewModelBase
     public ICommand OpenGroupChatCommand { get; }
     public ICommand CreateGroupCommand { get; }
     public ICommand SignOutCommand { get; }
+    public ICommand EditProfileCommand { get; }
     public ICommand CloseDetailsCommand { get; }
     public ICommand BackDetailsCommand { get; }
     public AsyncRelayCommand<TodoTaskViewModel> ToggleTaskStatusCommand { get; }
@@ -283,6 +285,14 @@ public class MainViewModel : ViewModelBase
 
     public void RaiseToast(string message) =>
         ToastRequested?.Invoke(this, message);
+
+    private void EditProfile() => ProfileDialogService.ShowEdit(_window, this);
+
+    public void ApplyUserUpdate()
+    {
+        OnPropertyChanged(nameof(User));
+        LoadLookupsAsync().SafeFireAndForget(OnAsyncCommandError);
+    }
 
     private async Task LoadLookupsAsync()
     {
