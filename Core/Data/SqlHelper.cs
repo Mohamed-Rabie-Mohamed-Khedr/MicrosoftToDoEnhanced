@@ -1,6 +1,8 @@
 using System.Configuration;
 using System.Data;
-using Microsoft.Data.SqlClient;
+using System.Data.Common;
+using System.Globalization;
+using Microsoft.Data.Sqlite;
 
 namespace Core.Data;
 
@@ -9,8 +11,35 @@ internal static class SqlHelper
     private const string ConnectionStringName = "MicrosoftToDoEnhanced";
     private const string ConnectionStringEnvironmentVariable = "MICROSOFTTODOENHANCED_CONNECTIONSTRING";
 
-    private static SqlConnection CreateConnection() =>
-        new(GetConnectionString());
+    private static readonly string DefaultDataSource = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MicrosoftToDoEnhanced",
+        "todo.db");
+
+    private static readonly HashSet<string> DateColumnNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CreationDate",
+        "PlannedStartDate",
+        "PlannedEndDate",
+        "DueStartDate",
+        "DueEndDate",
+        "CreatedAt",
+        "PostDate"
+    };
+
+    internal static string ConnectionString => GetConnectionString();
+
+    private static SqliteConnection CreateConnection()
+    {
+        var connection = new SqliteConnection(GetConnectionString());
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys = ON;";
+        command.ExecuteNonQuery();
+
+        return connection;
+    }
 
     private static string GetConnectionString()
     {
@@ -19,123 +48,262 @@ internal static class SqlHelper
             return fromEnvironment;
 
         var settings = ConfigurationManager.ConnectionStrings[ConnectionStringName];
-        if (settings is null || string.IsNullOrWhiteSpace(settings.ConnectionString))
-            throw new InvalidOperationException(
-                $"Connection string '{ConnectionStringName}' was not found in the application configuration.");
+        if (settings is not null && !string.IsNullOrWhiteSpace(settings.ConnectionString))
+            return settings.ConnectionString;
 
-        return settings.ConnectionString;
+        return $"Data Source={DefaultDataSource};Foreign Keys=True";
     }
 
-    private static async Task<T> ExecuteCoreAsync<T>(
-        string sql,
-        bool storedProcedure,
-        SqlParameter[] parameters,
-        Func<SqlCommand,
-        Task<T>> execute)
+    private static SqliteCommand CreateCommand(
+        SqliteConnection connection, SqliteTransaction? transaction, string sql, SqliteParameter[] parameters)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync();
-
-        using var command = new SqlCommand(sql, connection);
-        command.CommandType = storedProcedure ? CommandType.StoredProcedure : CommandType.Text;
+        var command = connection.CreateCommand();
+        command.CommandText = sql;
+        if (transaction is not null)
+            command.Transaction = transaction;
         if (parameters.Length > 0)
             command.Parameters.AddRange(parameters);
+        return command;
+    }
 
+    public static async Task<IReadOnlyList<DataRow>> QueryAsync(string sql, params SqliteParameter[] parameters)
+    {
+        await using var connection = CreateConnection();
+        return await QueryAsync(connection, null, sql, parameters);
+    }
+
+    public static async Task<IReadOnlyList<DataRow>> QueryAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string sql, params SqliteParameter[] parameters)
+    {
         try
         {
-            return await execute(command);
+            await using var command = CreateCommand(connection, transaction, sql, parameters);
+            await using var reader = await command.ExecuteReaderAsync();
+            return ReadRows(BuildTable(reader));
         }
-        catch (SqlException exception)
+        catch (SqliteException exception)
         {
             throw Translate(exception);
         }
     }
 
-    public static Task<IReadOnlyList<DataRow>> QueryAsync(
-        string sql, bool storedProcedure = false, params SqlParameter[] parameters) =>
-        ExecuteCoreAsync(sql, storedProcedure, parameters, ReadResultSetAsync);
-
-    private static async Task<IReadOnlyList<DataRow>> ReadResultSetAsync(SqlCommand command)
+    internal static DataTable BuildTable(DbDataReader reader)
     {
-        await using var reader = await command.ExecuteReaderAsync();
         var table = new DataTable();
-        table.Load(reader);
+        var fieldCount = reader.FieldCount;
+        var dateColumns = new bool[fieldCount];
 
+        for (var i = 0; i < fieldCount; i++)
+        {
+            var name = reader.GetName(i);
+            var type = GetFieldTypeSafe(reader, i);
+            if (type == typeof(string) && DateColumnNames.Contains(name))
+            {
+                type = typeof(DateTime);
+                dateColumns[i] = true;
+            }
+
+            table.Columns.Add(name, type);
+        }
+
+        while (reader.Read())
+        {
+            var row = table.NewRow();
+            for (var i = 0; i < fieldCount; i++)
+            {
+                var value = reader.GetValue(i);
+                if (dateColumns[i] && value is string text)
+                    value = DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.None);
+                row[i] = value ?? DBNull.Value;
+            }
+
+            table.Rows.Add(row);
+        }
+
+        return table;
+    }
+
+    private static Type GetFieldTypeSafe(DbDataReader reader, int ordinal)
+    {
+        try
+        {
+            return reader.GetFieldType(ordinal);
+        }
+        catch (Exception)
+        {
+            return typeof(object);
+        }
+    }
+
+    internal static IReadOnlyList<DataRow> ReadRows(DataTable table)
+    {
         var rows = new List<DataRow>(table.Rows.Count);
         foreach (DataRow row in table.Rows)
             rows.Add(row);
         return rows;
     }
 
-    public static Task<object?> ScalarAsync(string sql, params SqlParameter[] parameters) =>
-        ExecuteCoreAsync(sql, false, parameters, static command => command.ExecuteScalarAsync());
-
-    public static async Task ExecuteAsync(string sql, bool storedProcedure = false, params SqlParameter[] parameters) =>
-        await ExecuteCoreAsync<int>(sql, storedProcedure, parameters, static command =>
-            command.ExecuteNonQueryAsync());
-
-    public static async Task<int?> ExecuteProcReturnAsync(string procedure, params SqlParameter[] parameters)
+    public static async Task<object?> ScalarAsync(string sql, params SqliteParameter[] parameters)
     {
-        var value = await ExecuteCoreAsync<object?>(procedure, true, parameters,
-            static command => command.ExecuteScalarAsync());
-        return value is null || value is DBNull ? (int?)null : Convert.ToInt32(value);
+        await using var connection = CreateConnection();
+        return await ScalarAsync(connection, null, sql, parameters);
     }
 
-    public static async Task<MultiResultReader> QueryMultipleAsync(string procedure, params SqlParameter[] parameters)
+    public static async Task<object?> ScalarAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string sql, params SqliteParameter[] parameters)
     {
-        var connection = CreateConnection();
-        await connection.OpenAsync();
-
-        var command = new SqlCommand(procedure, connection)
-        {
-            CommandType = CommandType.StoredProcedure
-        };
-        if (parameters.Length > 0)
-            command.Parameters.AddRange(parameters);
-
         try
         {
+            await using var command = CreateCommand(connection, transaction, sql, parameters);
+            return await command.ExecuteScalarAsync();
+        }
+        catch (SqliteException exception)
+        {
+            throw Translate(exception);
+        }
+    }
+
+    public static async Task<int> ExecuteAsync(string sql, params SqliteParameter[] parameters)
+    {
+        await using var connection = CreateConnection();
+        return await ExecuteAsync(connection, null, sql, parameters);
+    }
+
+    public static async Task<int> ExecuteAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string sql, params SqliteParameter[] parameters)
+    {
+        try
+        {
+            await using var command = CreateCommand(connection, transaction, sql, parameters);
+            return await command.ExecuteNonQueryAsync();
+        }
+        catch (SqliteException exception)
+        {
+            throw Translate(exception);
+        }
+    }
+
+    public static async Task<int?> ExecuteReturnAsync(string sql, params SqliteParameter[] parameters)
+    {
+        await using var connection = CreateConnection();
+        return await ExecuteReturnAsync(connection, null, sql, parameters);
+    }
+
+    public static async Task<int?> ExecuteReturnAsync(
+        SqliteConnection connection, SqliteTransaction? transaction, string sql, params SqliteParameter[] parameters)
+    {
+        try
+        {
+            var text = sql.TrimEnd().EndsWith(';')
+                ? sql + " SELECT last_insert_rowid();"
+                : sql + "; SELECT last_insert_rowid();";
+
+            await using var command = CreateCommand(connection, transaction, text, parameters);
+            var value = await command.ExecuteScalarAsync();
+            return value is null || value is DBNull ? null : Convert.ToInt32(value);
+        }
+        catch (SqliteException exception)
+        {
+            throw Translate(exception);
+        }
+    }
+
+    public static async Task InTransactionAsync(Func<SqliteConnection, SqliteTransaction, Task> operation)
+    {
+        await using var connection = CreateConnection();
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            await operation(connection, transaction);
+            transaction.Commit();
+        }
+        catch
+        {
+            try
+            {
+                transaction.Rollback();
+            }
+            catch (Exception)
+            {
+            }
+
+            throw;
+        }
+    }
+
+    public static async Task<T> InTransactionAsync<T>(Func<SqliteConnection, SqliteTransaction, Task<T>> operation)
+    {
+        await using var connection = CreateConnection();
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            var result = await operation(connection, transaction);
+            transaction.Commit();
+            return result;
+        }
+        catch
+        {
+            try
+            {
+                transaction.Rollback();
+            }
+            catch (Exception)
+            {
+            }
+
+            throw;
+        }
+    }
+
+    public static async Task<MultiResultReader> QueryMultipleAsync(string sql, params SqliteParameter[] parameters)
+    {
+        var connection = CreateConnection();
+        SqliteCommand? command = null;
+        try
+        {
+            command = CreateCommand(connection, null, sql, parameters);
             var reader = await command.ExecuteReaderAsync();
             return new MultiResultReader(connection, command, reader);
         }
-        catch (SqlException exception)
+        catch (SqliteException exception)
         {
-            await command.DisposeAsync();
+            if (command is not null)
+                await command.DisposeAsync();
             await connection.DisposeAsync();
             throw Translate(exception);
         }
     }
 
-    public static string TaskIdsJson(IReadOnlyList<int> taskIds) =>
-        "[" + string.Join(",", taskIds) + "]";
-
-    private static Exception Translate(SqlException exception)
+    public static (string Values, SqliteParameter[] Parameters) InValues(IReadOnlyList<int> ids)
     {
-        switch (exception.Number)
+        var values = new string[ids.Count];
+        var parameters = new SqliteParameter[ids.Count];
+        for (var i = 0; i < ids.Count; i++)
         {
-            case 50001:
-                return new UnauthorizedAccessException(exception.Message, exception);
-            case 50002:
-            case 50003:
-            case 50004:
-                return new InvalidOperationException(exception.Message, exception);
-            case 2601:
-            case 2627:
-                return new InvalidOperationException("That record already exists.", exception);
-            default:
-                return exception;
+            values[i] = $"(@t{i}, {i})";
+            parameters[i] = new SqliteParameter($"@t{i}", ids[i]);
         }
+
+        return (string.Join(", ", values), parameters);
+    }
+
+    private static Exception Translate(SqliteException exception)
+    {
+        if (exception.SqliteExtendedErrorCode is 1555 or 2067)
+            return new InvalidOperationException("That record already exists.", exception);
+
+        return exception;
     }
 }
 
 public sealed class MultiResultReader : IAsyncDisposable
 {
-    private readonly SqlConnection _connection;
-    private readonly SqlCommand _command;
-    private readonly SqlDataReader _reader;
+    private readonly SqliteConnection _connection;
+    private readonly SqliteCommand _command;
+    private readonly DbDataReader _reader;
     private bool _started;
 
-    internal MultiResultReader(SqlConnection connection, SqlCommand command, SqlDataReader reader)
+    internal MultiResultReader(SqliteConnection connection, SqliteCommand command, DbDataReader reader)
     {
         _connection = connection;
         _command = command;
@@ -154,19 +322,7 @@ public sealed class MultiResultReader : IAsyncDisposable
             _started = true;
         }
 
-        var table = new DataTable();
-        var fieldCount = _reader.FieldCount;
-        var values = new object[fieldCount];
-        for (var i = 0; i < fieldCount; i++)
-            table.Columns.Add(_reader.GetName(i), _reader.GetFieldType(i));
-
-        while (await _reader.ReadAsync())
-        {
-            _reader.GetValues(values);
-            table.Rows.Add(values);
-        }
-
-        return table;
+        return SqlHelper.BuildTable(_reader);
     }
 
     public async ValueTask DisposeAsync()

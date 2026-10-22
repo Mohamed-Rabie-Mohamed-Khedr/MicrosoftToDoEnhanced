@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Microsoft To Do Enhanced — Sign in"
+        Icon="pack://application:,,,/app.ico"
         Height="680" Width="920" MinHeight="640" MinWidth="840"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanMinimize"
@@ -106,13 +107,22 @@
                                   Content="Remember me"
                                   IsChecked="{Binding IsRememberMe, Mode=TwoWay}"/>
 
-                        <Button Style="{StaticResource PrimaryButtonStyle}" Content="Sign in" Margin="0,18,0,0"
+                        <Button Style="{StaticResource PrimaryButtonStyle}" Margin="0,18,0,0"
+                                IsDefault="True" ToolTip="Sign in (Enter)"
                                 Command="{Binding SignInCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
+                            <TextBlock>
+                                <Run Text="S" TextDecorations="Underline"/><Run Text="ign in"/>
+                            </TextBlock>
+                        </Button>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="New here?"/>
-                            <Button Style="{StaticResource LinkButtonStyle}" Content="Create an account"
-                                    Command="{Binding ToggleModeCommand}"/>
+                            <Button Style="{StaticResource LinkButtonStyle}" ToolTip="Create a new account"
+                                    Command="{Binding ToggleModeCommand}">
+                                <TextBlock>
+                                    <Run Text="C" TextDecorations="Underline"/><Run Text="reate an account"/>
+                                </TextBlock>
+                            </Button>
                         </StackPanel>
                     </StackPanel>
 
@@ -170,14 +180,23 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <Button Style="{StaticResource PrimaryButtonStyle}" Content="Create account" Margin="0,18,0,0"
+                        <Button Style="{StaticResource PrimaryButtonStyle}" Margin="0,18,0,0"
+                                IsDefault="True" ToolTip="Create account (Enter)"
                                 Command="{Binding RegisterCommand}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"/>
+                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
+                            <TextBlock>
+                                <Run Text="C" TextDecorations="Underline"/><Run Text="reate account"/>
+                            </TextBlock>
+                        </Button>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
                             <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Already have an account?"/>
-                            <Button Style="{StaticResource LinkButtonStyle}" Content="Sign in"
-                                    Command="{Binding ToggleModeCommand}"/>
+                            <Button Style="{StaticResource LinkButtonStyle}" ToolTip="Back to sign in"
+                                    Command="{Binding ToggleModeCommand}">
+                                <TextBlock>
+                                    <Run Text="S" TextDecorations="Underline"/><Run Text="ign in"/>
+                                </TextBlock>
+                            </Button>
                         </StackPanel>
                     </StackPanel>
                 </Grid>

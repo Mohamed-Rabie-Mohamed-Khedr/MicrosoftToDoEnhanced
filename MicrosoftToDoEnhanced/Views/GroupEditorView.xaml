@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:MicrosoftToDoEnhanced.Controls"
         Title="{Binding EditorTitle}"
+        Icon="pack://application:,,,/app.ico"
         Height="560" Width="440" MinHeight="480" MinWidth="380"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip"
@@ -45,8 +46,12 @@
                         <TextBlock Style="{StaticResource CaptionTextStyle}" Margin="0,2,0,10"
                                    Text="Deleting this group removes its tasks and feed for everyone."/>
                         <Button Style="{StaticResource DangerButtonStyle}" MinHeight="32" HorizontalAlignment="Left"
-                                Content="Delete group"
-                                Command="{Binding DeleteGroupCommand}"/>
+                                ToolTip="Delete group"
+                                Command="{Binding DeleteGroupCommand}">
+                            <TextBlock>
+                                <Run Text="D" TextDecorations="Underline"/><Run Text="elete group"/>
+                            </TextBlock>
+                        </Button>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -54,9 +59,14 @@
 
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="20,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Style="{StaticResource SecondaryButtonStyle}" Content="Cancel" Margin="0,0,10,0"
-                        IsCancel="True"/>
+                <Button Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,10,0"
+                        IsCancel="True" ToolTip="Cancel (Esc)">
+                    <TextBlock>
+                        <Run Text="C" TextDecorations="Underline"/><Run Text="ancel"/>
+                    </TextBlock>
+                </Button>
                 <Button Style="{StaticResource PrimaryButtonStyle}" Content="{Binding PrimaryActionText}"
+                        IsDefault="True" ToolTip="Save (Enter)"
                         Command="{Binding SaveGroupCommand}"/>
             </StackPanel>
         </Border>

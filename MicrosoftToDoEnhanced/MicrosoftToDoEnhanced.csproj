@@ -8,10 +8,15 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>MicrosoftToDoEnhanced</RootNamespace>
 		<AssemblyName>MicrosoftToDoEnhanced</AssemblyName>
+		<ApplicationIcon>app.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\Core\Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="app.ico" />
 	</ItemGroup>
 
 	<ItemGroup>

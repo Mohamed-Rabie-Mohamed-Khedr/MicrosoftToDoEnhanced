@@ -4,10 +4,17 @@
         xmlns:views="clr-namespace:MicrosoftToDoEnhanced.Views"
         xmlns:controls="clr-namespace:MicrosoftToDoEnhanced.Controls"
         Title="Microsoft To Do Enhanced"
+        Icon="pack://application:,,,/app.ico"
         Height="760" Width="1240" MinHeight="600" MinWidth="1020"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
-        FontFamily="Segoe UI Variable Text, Segoe UI">
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        PreviewKeyDown="OnWindowPreviewKeyDown">
+
+    <Window.InputBindings>
+        <KeyBinding Key="Up" Modifiers="Control+Shift" Command="{Binding MoveTaskUpCommand}"/>
+        <KeyBinding Key="Down" Modifiers="Control+Shift" Command="{Binding MoveTaskDownCommand}"/>
+    </Window.InputBindings>
 
     <Window.Resources>
         <Style x:Key="SortRadioButtonStyle" TargetType="RadioButton">
@@ -69,7 +76,8 @@
                 </Grid>
 
                 <Grid Grid.Row="1" Margin="16,4,16,10">
-                    <TextBox Style="{StaticResource ModernTextBoxStyle}" MinHeight="32" Padding="34,0,10,0"
+                    <TextBox x:Name="SearchBox" Style="{StaticResource ModernTextBoxStyle}" MinHeight="32" Padding="34,0,10,0"
+                             ToolTip="Search (Ctrl+F)"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
                     <Path Width="12" Height="12" Stretch="Uniform" Margin="12,0,0,0" VerticalAlignment="Center"
                           HorizontalAlignment="Left" IsHitTestVisible="False"
@@ -124,8 +132,9 @@
                         </Button>
                     </Grid>
 
-                    <ListBox Grid.Row="1" ItemsSource="{Binding Groups}"
-                             SelectedItem="{Binding SelectedGroup, Mode=OneWay}"
+                    <ListBox x:Name="GroupsList" Grid.Row="1" ItemsSource="{Binding Groups}"
+                             SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
+                             KeyDown="OnGroupsKeyDown"
                              Style="{StaticResource FluentListBoxStyle}" Margin="8,0,8,8">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem" BasedOn="{StaticResource FluentListBoxItemStyle}">
@@ -218,17 +227,27 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                     <Border Style="{StaticResource BadgeStyle}" Padding="3" VerticalAlignment="Center" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <RadioButton Content="My order" Style="{StaticResource SortRadioButtonStyle}"
-                                         IsChecked="{Binding SortByImportance, Converter={StaticResource InverseBoolConverter}}"/>
-                            <RadioButton Content="Importance" Style="{StaticResource SortRadioButtonStyle}"
-                                         IsChecked="{Binding SortByImportance}"/>
+                            <RadioButton Style="{StaticResource SortRadioButtonStyle}"
+                                         ToolTip="Sort tasks by my order"
+                                         IsChecked="{Binding SortByImportance, Converter={StaticResource InverseBoolConverter}}">
+                                <TextBlock>
+                                    <Run Text="M" TextDecorations="Underline"/><Run Text="y order"/>
+                                </TextBlock>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SortRadioButtonStyle}"
+                                         ToolTip="Sort tasks by importance"
+                                         IsChecked="{Binding SortByImportance}">
+                                <TextBlock>
+                                    <Run Text="I" TextDecorations="Underline"/><Run Text="mportance"/>
+                                </TextBlock>
+                            </RadioButton>
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </Grid>
 
             <Grid Grid.Row="1" Margin="16,0,16,0">
-                <ListBox ItemsSource="{Binding Tasks}"
+                <ListBox x:Name="TasksList" ItemsSource="{Binding Tasks}"
                          SelectedItem="{Binding SelectedTask}"
                          Style="{StaticResource FluentListBoxStyle}"
                          Padding="8,4"
@@ -275,7 +294,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
+                    <TextBox x:Name="NewTaskBox" Grid.Column="1" Style="{StaticResource ModernTextBoxStyle}"
                              Background="Transparent" BorderThickness="0" MinHeight="42"
                              Text="{Binding NewTaskTitle, UpdateSourceTrigger=PropertyChanged}">
                         <TextBox.InputBindings>
@@ -286,13 +305,17 @@
                                Style="{StaticResource SecondaryTextStyle}" Text="Add a task, press Enter"
                                Visibility="{Binding NewTaskTitle, Converter={StaticResource NullToVisibilityConverter}}"/>
                     <Button Grid.Column="2" Style="{StaticResource PrimaryButtonStyle}" MinHeight="32"
-                            Content="Add" Margin="0,0,4,0"
-                            Command="{Binding AddTaskCommand}"/>
+                            Margin="0,0,4,0" ToolTip="Add a task (Enter)"
+                            Command="{Binding AddTaskCommand}">
+                        <TextBlock>
+                            <Run Text="A" TextDecorations="Underline"/><Run Text="dd"/>
+                        </TextBlock>
+                    </Button>
                 </Grid>
             </Border>
         </Grid>
 
-        <Border Grid.Column="3" Width="360" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0"
+        <Border x:Name="DetailHost" Grid.Column="3" Width="360" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1,0,0,0"
                 Visibility="{Binding IsDetailOpen, Converter={StaticResource BoolToVisibilityConverter}}"
                 Background="{DynamicResource CardBackgroundBrush}">
             <Border.RenderTransform>

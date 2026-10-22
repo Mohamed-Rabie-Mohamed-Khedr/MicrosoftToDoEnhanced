@@ -34,7 +34,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource IconButtonStyle}" ToolTip="Back to parent task"
+                <Button Style="{StaticResource IconButtonStyle}" ToolTip="Back (Backspace)"
                         Visibility="{Binding DataContext.HasDetailParent, Converter={StaticResource BoolToVisibilityConverter}, RelativeSource={RelativeSource AncestorType=Window}}"
                         Command="{Binding DataContext.BackDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}">
                     <Path Width="10" Height="10" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
@@ -44,7 +44,7 @@
                         Background="{Binding Color, Converter={StaticResource HexToBrushConverter}}"/>
                 <TextBlock Text="Task details" Style="{StaticResource SectionTitleTextStyle}"/>
             </StackPanel>
-            <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" ToolTip="Close details"
+            <Button Grid.Column="1" Style="{StaticResource IconButtonStyle}" ToolTip="Close (Esc)"
                     Command="{Binding DataContext.CloseDetailsCommand, RelativeSource={RelativeSource AncestorType=Window}}">
                 <Path Width="10" Height="10" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                       Data="M0,1.4 L1.4,0 L5,3.6 L8.6,0 L10,1.4 L6.4,5 L10,8.6 L8.6,10 L5,6.4 L1.4,10 L0,8.6 L3.6,5 Z"/>
@@ -223,8 +223,13 @@
 
                 <Grid Margin="0,18,0,6">
                     <TextBlock Text="Attachments" Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center"/>
-                    <Button HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}" Content="+ Add file"
-                            Command="{Binding AddAttachmentCommand}"/>
+                    <Button HorizontalAlignment="Right" Style="{StaticResource LinkButtonStyle}"
+                            ToolTip="Attach a file"
+                            Command="{Binding AddAttachmentCommand}">
+                        <TextBlock>
+                            <Run Text="+ "/><Run Text="A" TextDecorations="Underline"/><Run Text="dd file"/>
+                        </TextBlock>
+                    </Button>
                 </Grid>
 
                 <Border Style="{StaticResource CardStyle}" Padding="8" Effect="{x:Null}"
@@ -272,13 +277,22 @@
         <Border Grid.Row="2" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
                 <Button Style="{StaticResource DangerButtonStyle}" MinHeight="30" Padding="12,0"
-                        HorizontalAlignment="Left" Content="Delete task"
-                        Command="{Binding DeleteTaskCommand}"/>
+                        HorizontalAlignment="Left" ToolTip="Delete task (Delete)"
+                        Command="{Binding DeleteTaskCommand}">
+                    <TextBlock>
+                        <Run Text="D" TextDecorations="Underline"/><Run Text="elete task"/>
+                    </TextBlock>
+                </Button>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock Style="{StaticResource CaptionTextStyle}" VerticalAlignment="Center" Margin="0,0,12,0"
                                Text="{Binding CreationDate, StringFormat='Created {0:MMM d, yyyy}'}"/>
-                    <Button Style="{StaticResource PrimaryButtonStyle}" MinHeight="30" Content="Save"
-                            Command="{Binding SaveTaskCommand}"/>
+                    <Button Style="{StaticResource PrimaryButtonStyle}" MinHeight="30"
+                            IsDefault="True" ToolTip="Save (Enter)"
+                            Command="{Binding SaveTaskCommand}">
+                        <TextBlock>
+                            <Run Text="S" TextDecorations="Underline"/><Run Text="ave"/>
+                        </TextBlock>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>

@@ -59,6 +59,8 @@ public class MainViewModel : ViewModelBase
         BackDetailsCommand = new RelayCommand(BackToParent);
         ToggleTaskStatusCommand = new AsyncRelayCommand<TodoTaskViewModel>(ToggleTaskStatusAsync, onError: OnAsyncCommandError);
         ReorderTasksCommand = new AsyncRelayCommand<ReorderPayload>(ReorderTasksAsync, onError: OnAsyncCommandError);
+        MoveTaskUpCommand = new AsyncRelayCommand(() => MoveSelectedTaskAsync(-1), onError: OnAsyncCommandError);
+        MoveTaskDownCommand = new AsyncRelayCommand(() => MoveSelectedTaskAsync(1), onError: OnAsyncCommandError);
     }
 
     private void OnAsyncCommandError(Exception exception) => RaiseToast(DescribeError(exception));
@@ -79,6 +81,8 @@ public class MainViewModel : ViewModelBase
     public ICommand BackDetailsCommand { get; }
     public AsyncRelayCommand<TodoTaskViewModel> ToggleTaskStatusCommand { get; }
     public AsyncRelayCommand<ReorderPayload> ReorderTasksCommand { get; }
+    public ICommand MoveTaskUpCommand { get; }
+    public ICommand MoveTaskDownCommand { get; }
 
     public event EventHandler<string>? ToastRequested;
     public event EventHandler? SignOutRequested;
@@ -662,6 +666,50 @@ public class MainViewModel : ViewModelBase
         }
 
         await ReorderItemsAsync(dragged.TaskParentID, dragged, target);
+    }
+
+    private async Task MoveSelectedTaskAsync(int delta)
+    {
+        var task = SelectedTask;
+        if (task is null)
+            return;
+
+        if (!CanReorderTasks)
+        {
+            RaiseToast("Tasks in this view are ordered by date or importance and cannot be reordered.");
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            RaiseToast("Clear the search box before reordering");
+            return;
+        }
+
+        if (SortByImportance)
+        {
+            RaiseToast("Switch back to \u201CMy order\u201D before reordering");
+            return;
+        }
+
+        TodoTaskViewModel? parent = null;
+        if (task.TaskParentID is int parentId)
+        {
+            parent = _sourceViewModels.FirstOrDefault(p => p.TaskID == parentId);
+            if (parent is null)
+            {
+                RaiseToast("That task is not part of the current list, so it cannot be reordered.");
+                return;
+            }
+        }
+
+        IList<TodoTaskViewModel> items = parent is not null ? parent.Steps : _sourceViewModels;
+        var index = items.IndexOf(task);
+        var targetIndex = index + delta;
+        if (index < 0 || targetIndex < 0 || targetIndex >= items.Count)
+            return;
+
+        await ReorderItemsAsync(task.TaskParentID, task, items[targetIndex]);
     }
 
     private async Task ReorderItemsAsync(int? parentTaskId, TodoTaskViewModel dragged, TodoTaskViewModel target)
